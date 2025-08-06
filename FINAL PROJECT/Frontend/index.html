@@ -17,68 +17,77 @@
                 <p>ระบบจัดการหมู่บ้านออนไลน์</p>
             </div>
             <form id="loginForm">
-                <div class="form-group">
-                    <label for="username">ชื่อผู้ใช้</label>
-                    <input type="text" class="form-control" id="username" required>
-                </div>
-                <div class="form-group">
-                    <label for="password">รหัสผ่าน</label>
-                    <div class="password-wrapper">
-                        <input type="password" class="form-control" id="password" required>
-                        <i class="fas fa-eye toggle-password" onclick="togglePasswordVisibility('password')"></i>
-                    </div>
-                </div>
-                <div class="form-group" style="display: flex; align-items: center;">
-                    <input type="checkbox" id="rememberMe" style="margin-right: 8px;">
-                    <label for="rememberMe" style="margin-bottom: 0;">จำฉันไว้</label>
-                </div>
-                <button type="submit" class="btn btn-primary">เข้าสู่ระบบ</button>
-                <div style="display: flex; justify-content: space-between;">
-                    <button type="button" class="btn btn-secondary" onclick="showRegister()">ลงทะเบียน</button>
-                    <a href="#" onclick="showForgotPassword()" style="align-self: center; color: #667eea;">ลืมรหัสผ่าน?</a>
-                </div>
-            </form>
+    <div class="form-group">
+        <label for="username">ชื่อผู้ใช้</label>
+        <input type="text" class="form-control" id="username" required>
+    </div>
+    <div class="form-group">
+        <label for="password">รหัสผ่าน</label>
+        <div class="password-wrapper">
+            <input type="password" class="form-control" id="password" required>
+            <i class="fas fa-eye toggle-password" onclick="togglePasswordVisibility('password')"></i>
+        </div>
+    </div>
+    <div class="form-group" style="display: flex; align-items: center;">
+        <input type="checkbox" id="rememberMe" style="margin-right: 8px;">
+        <label for="rememberMe" style="margin-bottom: 0;">จำฉันไว้</label>
+    </div>
+
+    <!-- ปุ่มเข้าสู่ระบบ -->
+    <button type="submit" class="btn btn-primary">เข้าสู่ระบบ</button>
+
+    <!-- ปุ่มลงทะเบียน -->
+    <div style="text-align: center; margin-top: 10px;">
+        <button type="button" class="btn btn-secondary" onclick="showRegister()">ลงทะเบียน</button>
+    </div>
+
+    <!-- ลิงก์ลืมรหัสผ่าน (อยู่ด้านล่าง) -->
+    <div style="text-align: center; margin-top: 10px;">
+        <a href="#" onclick="showForgotPassword()" style="color: #667eea;">ลืมรหัสผ่าน?</a>
+    </div>
+</form>
+
         </div>
     </div>
 
     <!-- Register Page -->
     <div id="registerPage" class="login-container hidden">
-        <div class="register-card fade-in">
-            <div class="logo">
-                <h1><i class="fas fa-user-plus"></i></h1>
-                <h1>ลงทะเบียน</h1>
-                <p>สมัครสมาชิกใหม่</p>
-            </div>
-            <form id="registerForm">
-                <div class="form-group">
-                    <label for="regName">ชื่อ-นามสกุล</label>
-                    <input type="text" class="form-control" id="regName" required>
-                </div>
-                <div class="form-group">
-                    <label for="regUsername">ชื่อผู้ใช้</label>
-                    <input type="text" class="form-control" id="regUsername" required>
-                </div>
-                <div class="form-group">
-                    <label for="regPassword">รหัสผ่าน</label>
-                    <input type="password" class="form-control" id="regPassword" required>
-                </div>
-                <div class="form-group">
-                    <label for="regConfirmPassword">ยืนยันรหัสผ่าน</label>
-                    <input type="password" class="form-control" id="regConfirmPassword" required>
-                </div>
-                <div class="form-group">
-                    <label for="regPhone">เบอร์ติดต่อ</label>
-                    <input type="tel" class="form-control" id="regPhone" required>
-                </div>
-                <div class="form-group">
-                    <label for="regAddress">ที่อยู่ (บ้านเลขที่)</label>
-                    <input type="text" class="form-control" id="regAddress" required>
-                </div>
-                <button type="submit" class="btn btn-primary">ส่งคำขอลงทะเบียน</button>
-                <button type="button" class="btn btn-secondary" onclick="showLogin()">กลับไปเข้าสู่ระบบ</button>
-            </form>
+    <div class="register-card fade-in">
+        <div class="logo">
+            <h1><i class="fas fa-user-plus"></i></h1>
+            <h1>ลงทะเบียน</h1>
+            <p>สมัครสมาชิกใหม่</p>
         </div>
+        <form id="registerForm">
+            <div class="form-group">
+                <label for="regName">ชื่อ-นามสกุล <span style="color: red;">*</span></label>
+                <input type="text" class="form-control" id="regName" required>
+            </div>
+            <div class="form-group">
+                <label for="regUsername">ชื่อผู้ใช้ <span style="color: red;">*</span></label>
+                <input type="text" class="form-control" id="regUsername" required>
+            </div>
+            <div class="form-group">
+                <label for="regPassword">รหัสผ่าน <span style="color: red;">*</span></label>
+                <input type="password" class="form-control" id="regPassword" required>
+            </div>
+            <div class="form-group">
+                <label for="regConfirmPassword">ยืนยันรหัสผ่าน <span style="color: red;">*</span></label>
+                <input type="password" class="form-control" id="regConfirmPassword" required>
+            </div>
+            <div class="form-group">
+                <label for="regPhone">เบอร์ติดต่อ <span style="color: red;">*</span></label>
+                <input type="tel" class="form-control" id="regPhone" required>
+            </div>
+            <div class="form-group">
+                <label for="regAddress">ที่อยู่ (บ้านเลขที่) <span style="color: red;">*</span></label>
+                <input type="text" class="form-control" id="regAddress" required>
+            </div>
+            <button type="submit" class="btn btn-primary">ส่งคำขอลงทะเบียน</button>
+            <button type="button" class="btn btn-secondary" onclick="showLogin()">กลับไปเข้าสู่ระบบ</button>
+        </form>
     </div>
+</div>
 
     <!-- Dashboard -->
     <div id="dashboard" class="dashboard hidden">

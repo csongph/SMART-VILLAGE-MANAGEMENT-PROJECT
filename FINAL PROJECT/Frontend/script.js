@@ -1,1293 +1,612 @@
-<<<<<<< HEAD:Frontend/style.css
-/* style.css */
-
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    min-height: 100vh;
-    color: #333;
-}
-
-/* Login Styles */
-.login-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    padding: 20px;
-}
-
-.login-card, .register-card {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    padding: 40px;
-    border-radius: 20px;
-    box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-    width: 100%;
-    max-width: 450px;
-    text-align: center;
-}
-
-.register-card {
-    max-width: 500px;
-}
-
-.logo h1 {
-    color: #667eea;
-    margin-bottom: 10px;
-}
-
-.logo p {
-    color: #666;
-    margin-bottom: 30px;
-}
-
-.form-group {
-    margin-bottom: 20px;
-    text-align: left;
-}
-
-.form-row {
-    display: flex;
-    gap: 15px;
-}
-
-.form-row .form-group {
-    flex: 1;
-}
-
-label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: 600;
-    color: #555;
-}
-
-.form-control {
-    width: 100%;
-    padding: 12px 15px;
-    border: 2px solid #e1e5e9;
-    border-radius: 10px;
-    font-size: 16px;
-    transition: all 0.3s ease;
-}
-
-.form-control:focus {
-    outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-.password-wrapper {
-    position: relative;
-}
-
-.toggle-password {
-    position: absolute;
-    right: 15px;
-    top: 50%;
-    transform: translateY(-50%);
-    cursor: pointer;
-    color: #666;
-}
-
-.btn {
-    width: 100%;
-    padding: 12px;
-    border: none;
-    border-radius: 10px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    margin-bottom: 15px;
-}
-
-.btn-primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-}
-
-.btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
-}
-
-.btn-secondary {
-    background: #f8f9fa;
-    color: #666;
-    border: 2px solid #e1e5e9;
-}
-
-.btn-secondary:hover {
-    background: #e9ecef;
-}
-
-.btn-sm {
-    padding: 6px 12px;
-    font-size: 14px;
-    width: auto;
-    margin: 0 5px;
-}
-
-.file-upload {
-    border: 2px dashed #e1e5e9;
-    border-radius: 10px;
-    padding: 30px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.file-upload:hover {
-    border-color: #667eea;
-    background: rgba(102, 126, 234, 0.05);
-}
-
-.file-upload i {
-    font-size: 48px;
-    color: #667eea;
-    margin-bottom: 15px;
-}
-
-/* Dashboard Styles */
-.dashboard {
-    display: flex;
-    min-height: 100vh;
-    background: #f5f7fa;
-}
-
-.header {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 70px;
-    background: white;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    z-index: 1000;
-}
-
-.header-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    height: 100%;
-    padding: 0 30px;
-}
-
-.header h1 {
-    color: #667eea;
-    font-size: 24px;
-}
-
-.user-info {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-}
-
-.user-avatar {
-    width: 40px;
-    height: 40px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-}
-
-.sidebar {
-    width: 280px;
-    background: white;
-    height: 100vh;
-    position: fixed;
-    left: 0;
-    top: 70px;
-    overflow-y: auto;
-    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-}
-
-.sidebar-menu {
-    list-style: none;
-    padding: 20px 0;
-}
-
-.sidebar-menu li a {
-    display: flex;
-    align-items: center;
-    padding: 15px 30px;
-    color: #666;
-    text-decoration: none;
-    transition: all 0.3s ease;
-}
-
-.sidebar-menu li a:hover,
-.sidebar-menu li a.active {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-}
-
-.sidebar-menu li a i {
-    margin-right: 15px;
-    width: 20px;
-}
-
-.main-content {
-    margin-left: 280px;
-    margin-top: 70px;
-    padding: 30px;
-    min-height: calc(100vh - 70px);
-}
-
-.page-content {
-    max-width: 1200px;
-}
-
-.page-title {
-    margin-bottom: 30px;
-}
-
-.page-title h2 {
-    color: #333;
-    margin-bottom: 10px;
-}
-
-.page-title p {
-    color: #666;
-}
-
-.card {
-    background: white;
-    border-radius: 15px;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-    overflow: hidden;
-    margin-bottom: 20px;
-}
-
-.card-header {
-    padding: 20px 30px;
-    border-bottom: 1px solid #eee;
-    background: #f8f9fa;
-}
-
-.card-title {
-    color: #333;
-    margin: 0;
-}
-
-.card > form,
-.card > .table-container,
-.card > p,
-.card > div:not(.card-header) {
-    padding: 20px 30px;
-}
-
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 20px;
-    margin-bottom: 30px;
-}
-
-.stat-card {
-    background: white;
-    padding: 30px;
-    border-radius: 15px;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-    display: flex;
-    align-items: center;
-    gap: 20px;
-}
-
-.stat-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 24px;
-    color: white;
-}
-
-.stat-icon.blue { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-.stat-icon.orange { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
-.stat-icon.green { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
-.stat-icon.red { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
-
-.stat-info h3 {
-    font-size: 32px;
-    font-weight: bold;
-    color: #333;
-    margin: 0;
-}
-
-.stat-info p {
-    color: #666;
-    margin: 5px 0 0;
-}
-
-.table-container {
-    overflow-x: auto;
-}
-
-.table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.table th,
-.table td {
-    padding: 12px 15px;
-    text-align: left;
-    border-bottom: 1px solid #eee;
-}
-
-.table th {
-    background: #f8f9fa;
-    font-weight: 600;
-    color: #333;
-}
-
-.status-badge {
-    padding: 6px 12px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-}
-
-.status-pending { background: #fff3cd; color: #856404; }
-.status-progress { background: #d1ecf1; color: #0c5460; }
-.status-completed { background: #d4edda; color: #155724; }
-.status-approved { background: #d4edda; color: #155724; }
-.status-unpaid { background: #f8d7da; color: #721c24; }
-.status-paid { background: #d4edda; color: #155724; }
-
-/* Modal Styles */
-.modal {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.5);
-    z-index: 2000;
-}
-
-.modal-content {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: white;
-    border-radius: 15px;
-    box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-    width: 90%;
-    max-width: 500px;
-    max-height: 90vh;
-    overflow-y: auto;
-}
-
-.modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 20px 30px;
-    border-bottom: 1px solid #eee;
-}
-
-.modal-title {
-    margin: 0;
-    color: #333;
-}
-
-.modal-close {
-    background: none;
-    border: none;
-    font-size: 24px;
-    cursor: pointer;
-    color: #666;
-}
-
-.modal-content form {
-    padding: 20px 30px;
-}
-
-/* Notification Styles */
-.notification-container {
-    position: fixed;
-    top: 90px;
-    right: 20px;
-    z-index: 1500;
-    max-width: 400px;
-}
-
-.notification {
-    background: white;
-    border-radius: 10px;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-    padding: 15px 20px;
-    margin-bottom: 10px;
-    border-left: 4px solid #667eea;
-    animation: slideIn 0.3s ease;
-}
-
-.notification.success {
-    border-left-color: #28a745;
-}
-
-.notification.error {
-    border-left-color: #dc3545;
-}
-
-.notification.warning {
-    border-left-color: #ffc107;
-}
-
-@keyframes slideIn {
-    from {
-        transform: translateX(100%);
-        opacity: 0;
+// script.js
+// User data
+let currentUser = {
+    name: 'ผู้ใช้งาน',
+    role: 'resident', // resident, admin
+    avatar: 'A'
+};
+
+// Calendar data
+let currentDate = new Date();
+let currentMonth = currentDate.getMonth();
+let currentYear = currentDate.getFullYear();
+
+const monthNames = [
+    'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'
+];
+
+// Calendar events
+const calendarEvents = {
+    '2023-11-15': 'ประชุมคณะกรรมการ',
+    '2023-11-18': 'ทำความสะอาดหมู่บ้าน',
+    '2023-12-31': 'งานเลี้ยงสังสรรค์ปีใหม่'
+};
+
+// Initialization function
+document.addEventListener('DOMContentLoaded', function() {
+    // Check login status
+    if (localStorage.getItem('isLoggedIn') === 'true') {
+        const userData = JSON.parse(localStorage.getItem('userData') || '{}');
+        currentUser = { ...currentUser, ...userData };
+        showDashboard();
+    } else {
+        showLogin();
     }
-    to {
-        transform: translateX(0);
-        opacity: 1;
+
+    // Event Listeners setup
+    setupEventListeners();
+});
+
+function setupEventListeners() {
+    // Form submissions
+    document.getElementById('loginForm').addEventListener('submit', handleLogin);
+    document.getElementById('registerForm').addEventListener('submit', handleRegister);
+    document.getElementById('repairForm').addEventListener('submit', handleRepairSubmit);
+    document.getElementById('bookingForm').addEventListener('submit', handleBookingSubmit);
+    document.getElementById('paymentForm').addEventListener('submit', handlePaymentSubmit);
+    document.getElementById('profileForm').addEventListener('submit', handleProfileUpdate);
+    document.getElementById('changePasswordForm').addEventListener('submit', handlePasswordChange);
+    document.getElementById('visitorForm').addEventListener('submit', handleVisitorSubmit);
+    document.getElementById('incidentForm').addEventListener('submit', handleIncidentSubmit);
+    document.getElementById('documentUploadForm').addEventListener('submit', handleDocumentUpload);
+
+    // Payment method change
+    document.getElementById('paymentMethod').addEventListener('change', function() {
+        const bankDetails = document.getElementById('bankDetails');
+        if (this.value === 'bank_transfer') {
+            bankDetails.classList.remove('hidden');
+        } else {
+            bankDetails.classList.add('hidden');
+        }
+    });
+
+    // Chat input
+    document.getElementById('chatInput').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
+    });
+}
+
+// Authentication Functions
+function handleLogin(e) {
+    e.preventDefault();
+    const username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
+
+    if (username && password) {
+        currentUser = {
+            name: username === 'admin' ? 'ผู้ดูแลระบบ' : 'คุณ' + username,
+            role: username === 'admin' ? 'admin' : 'resident',
+            avatar: username.charAt(0).toUpperCase()
+        };
+
+        localStorage.setItem('isLoggedIn', 'true');
+        localStorage.setItem('userData', JSON.stringify(currentUser));
+        
+        showNotification('เข้าสู่ระบบสำเร็จ', 'success');
+        showDashboard();
+    } else {
+        showNotification('กรุณากรอกข้อมูลให้ครบถ้วน', 'error');
     }
 }
 
-/* Chat Styles */
-.chat-container {
-    height: 400px;
-    border: 1px solid #eee;
-    border-radius: 10px;
-    display: flex;
-    flex-direction: column;
-}
+function handleRegister(e) {
+    e.preventDefault();
+    const name = document.getElementById('regName').value;
+    const username = document.getElementById('regUsername').value;
+    const password = document.getElementById('regPassword').value;
+    const confirmPassword = document.getElementById('regConfirmPassword').value;
 
-.chat-messages {
-    flex: 1;
-    padding: 20px;
-    overflow-y: auto;
-    background: #f8f9fa;
-}
-
-.chat-message {
-    margin-bottom: 15px;
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-}
-
-.chat-message.own {
-    flex-direction: row-reverse;
-}
-
-.chat-message .message-content {
-    background: white;
-    padding: 10px 15px;
-    border-radius: 15px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    max-width: 70%;
-}
-
-.chat-message.own .message-content {
-    background: #667eea;
-    color: white;
-}
-
-.chat-input {
-    display: flex;
-    padding: 20px;
-    gap: 10px;
-    border-top: 1px solid #eee;
-}
-
-.chat-input input {
-    flex: 1;
-    padding: 10px 15px;
-    border: 1px solid #eee;
-    border-radius: 25px;
-    outline: none;
-}
-
-.chat-input button {
-    padding: 10px 20px;
-    background: #667eea;
-    color: white;
-    border: none;
-    border-radius: 25px;
-    cursor: pointer;
-}
-
-/* Calendar Styles */
-.calendar-container {
-    background: white;
-    border-radius: 15px;
-    overflow: hidden;
-}
-
-.calendar-header {
-    background: #667eea;
-    color: white;
-    padding: 20px;
-    text-align: center;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.calendar-nav {
-    background: none;
-    border: none;
-    color: white;
-    font-size: 20px;
-    cursor: pointer;
-    padding: 5px 10px;
-    border-radius: 5px;
-    transition: background 0.3s;
-}
-
-.calendar-nav:hover {
-    background: rgba(255,255,255,0.2);
-}
-
-.calendar-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-}
-
-.calendar-day {
-    padding: 15px;
-    text-align: center;
-    border-bottom: 1px solid #eee;
-    border-right: 1px solid #eee;
-    cursor: pointer;
-    transition: background 0.3s;
-}
-
-.calendar-day:hover {
-    background: #f8f9fa;
-}
-
-.calendar-day.header {
-    background: #f8f9fa;
-    font-weight: bold;
-    cursor: default;
-}
-
-.calendar-day.today {
-    background: #667eea;
-    color: white;
-}
-
-.calendar-day.has-event {
-    background: #e3f2fd;
-    position: relative;
-}
-
-.calendar-day.has-event::after {
-    content: '';
-    position: absolute;
-    bottom: 5px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 6px;
-    height: 6px;
-    background: #667eea;
-    border-radius: 50%;
-}
-
-/* Utility Classes */
-.hidden { display: none !important; }
-.fade-in { animation: fadeIn 0.5s ease; }
-.mt-20 { margin-top: 20px; }
-.mb-20 { margin-bottom: 20px; }
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-    .sidebar {
-        transform: translateX(-100%);
-        transition: transform 0.3s ease;
+    if (password !== confirmPassword) {
+        showNotification('รหัสผ่านไม่ตรงกัน', 'error');
+        return;
     }
+    
+    // Simulate registration
+    showNotification('ส่งคำขอลงทะเบียนสำเร็จ รอการอนุมัติจากผู้ดูแล', 'success');
+    setTimeout(() => {
+        showLogin();
+    }, 2000);
+}
 
-    .sidebar.open {
-        transform: translateX(0);
+function logout() {
+    localStorage.removeItem('isLoggedIn');
+    localStorage.removeItem('userData');
+    currentUser = { name: 'ผู้ใช้งาน', role: 'resident', avatar: 'A' };
+    showNotification('ออกจากระบบแล้ว', 'success');
+    showLogin();
+}
+
+// Page Navigation Functions
+function showLogin() {
+    document.getElementById('loginPage').classList.remove('hidden');
+    document.getElementById('registerPage').classList.add('hidden');
+    document.getElementById('dashboard').classList.add('hidden');
+}
+
+function showRegister() {
+    document.getElementById('loginPage').classList.add('hidden');
+    document.getElementById('registerPage').classList.remove('hidden');
+    document.getElementById('dashboard').classList.add('hidden');
+}
+
+function showDashboard() {
+    document.getElementById('loginPage').classList.add('hidden');
+    document.getElementById('registerPage').classList.add('hidden');
+    document.getElementById('dashboard').classList.remove('hidden');
+    
+    updateUserInfo();
+    showPage('dashboard-home');
+    generateCalendar();
+}
+
+function showPage(pageId) {
+    // Hide all pages
+    const pages = document.querySelectorAll('.page-content');
+    pages.forEach(page => page.classList.add('hidden'));
+    
+    // Show selected page
+    document.getElementById(pageId).classList.remove('hidden');
+    
+    // Update active menu
+    const menuItems = document.querySelectorAll('.sidebar-menu a');
+    menuItems.forEach(item => item.classList.remove('active'));
+    // Note: event.target might not be available if called directly,
+    // but it's typically used in event handlers.
+    // For direct calls, you might need to pass the element or find it.
+    const activeLink = document.querySelector(`.sidebar-menu a[onclick*="showPage('${pageId}')"]`);
+    if (activeLink) {
+        activeLink.classList.add('active');
     }
-
-    .main-content {
-        margin-left: 0;
-        padding: 20px;
-    }
-
-    .form-row {
-        flex-direction: column;
-        gap: 0;
-    }
-
-    .stats-grid {
-        grid-template-columns: 1fr;
-    }
-}
-=======
-/* style.css */
-
-* {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-}
-
-body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    min-height: 100vh;
-    color: #333;
-}
-
-/* Login Styles */
-.login-container {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    padding: 20px;
-}
-
-.login-card, .register-card {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    padding: 40px;
-    border-radius: 20px;
-    box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-    width: 100%;
-    max-width: 450px;
-    text-align: center;
-}
-
-.register-card {
-    max-width: 500px;
-}
-
-.logo h1 {
-    color: #667eea;
-    margin-bottom: 10px;
-}
-
-.logo p {
-    color: #666;
-    margin-bottom: 30px;
-}
-
-.form-group {
-    margin-bottom: 20px;
-    text-align: left;
-}
-
-.form-row {
-    display: flex;
-    gap: 15px;
-}
-
-.form-row .form-group {
-    flex: 1;
-}
-
-label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: 600;
-    color: #555;
-}
-
-.form-control {
-    width: 100%;
-    padding: 12px 15px;
-    border: 2px solid #e1e5e9;
-    border-radius: 10px;
-    font-size: 16px;
-    transition: all 0.3s ease;
-}
-
-.form-control:focus {
-    outline: none;
-    border-color: #667eea;
-    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
-
-.password-wrapper {
-    position: relative;
-}
-
-.toggle-password {
-    position: absolute;
-    right: 15px;
-    top: 50%;
-    transform: translateY(-50%);
-    cursor: pointer;
-    color: #666;
-}
-
-.btn {
-    width: 100%;
-    padding: 12px;
-    border: none;
-    border-radius: 10px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    margin-bottom: 15px;
-}
-
-.btn-primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-}
-
-.btn-primary:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
-}
-
-.btn-secondary {
-    background: #f8f9fa;
-    color: #666;
-    border: 2px solid #e1e5e9;
-}
-
-.btn-secondary:hover {
-    background: #e9ecef;
-}
-
-.btn-sm {
-    padding: 6px 12px;
-    font-size: 14px;
-    width: auto;
-    margin: 0 5px;
-}
-
-.file-upload {
-    border: 2px dashed #e1e5e9;
-    border-radius: 10px;
-    padding: 30px;
-    text-align: center;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.file-upload:hover {
-    border-color: #667eea;
-    background: rgba(102, 126, 234, 0.05);
-}
-
-.file-upload i {
-    font-size: 48px;
-    color: #667eea;
-    margin-bottom: 15px;
-}
-
-/* Dashboard Styles */
-.dashboard {
-    display: flex;
-    min-height: 100vh;
-    background: #f5f7fa;
-}
-
-.header {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 70px;
-    background: white;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-    z-index: 1000;
-}
-
-.header-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    height: 100%;
-    padding: 0 30px;
-}
-
-.header h1 {
-    color: #667eea;
-    font-size: 24px;
-}
-
-.user-info {
-    display: flex;
-    align-items: center;
-    gap: 15px;
-}
-
-.user-avatar {
-    width: 40px;
-    height: 40px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: bold;
-}
-
-.sidebar {
-    width: 280px;
-    background: white;
-    height: 100vh;
-    position: fixed;
-    left: 0;
-    top: 70px;
-    overflow-y: auto;
-    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
-}
-
-.sidebar-menu {
-    list-style: none;
-    padding: 20px 0;
-}
-
-.sidebar-menu li a {
-    display: flex;
-    align-items: center;
-    padding: 15px 30px;
-    color: #666;
-    text-decoration: none;
-    transition: all 0.3s ease;
-}
-
-.sidebar-menu li a:hover,
-.sidebar-menu li a.active {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-}
-
-.sidebar-menu li a i {
-    margin-right: 15px;
-    width: 20px;
-}
-
-.main-content {
-    margin-left: 280px;
-    margin-top: 70px;
-    padding: 30px;
-    min-height: calc(100vh - 70px);
-}
-
-.page-content {
-    max-width: 1200px;
-}
-
-.page-title {
-    margin-bottom: 30px;
-}
-
-.page-title h2 {
-    color: #333;
-    margin-bottom: 10px;
-}
-
-.page-title p {
-    color: #666;
-}
-
-.card {
-    background: white;
-    border-radius: 15px;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-    overflow: hidden;
-    margin-bottom: 20px;
-}
-
-.card-header {
-    padding: 20px 30px;
-    border-bottom: 1px solid #eee;
-    background: #f8f9fa;
-}
-
-.card-title {
-    color: #333;
-    margin: 0;
-}
-
-.card > form,
-.card > .table-container,
-.card > p,
-.card > div:not(.card-header) {
-    padding: 20px 30px;
-}
-
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 20px;
-    margin-bottom: 30px;
-}
-
-.stat-card {
-    background: white;
-    padding: 30px;
-    border-radius: 15px;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-    display: flex;
-    align-items: center;
-    gap: 20px;
-}
-
-.stat-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 24px;
-    color: white;
-}
-
-.stat-icon.blue { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
-.stat-icon.orange { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); }
-.stat-icon.green { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
-.stat-icon.red { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
-
-.stat-info h3 {
-    font-size: 32px;
-    font-weight: bold;
-    color: #333;
-    margin: 0;
-}
-
-.stat-info p {
-    color: #666;
-    margin: 5px 0 0;
-}
-
-.table-container {
-    overflow-x: auto;
-}
-
-.table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.table th,
-.table td {
-    padding: 12px 15px;
-    text-align: left;
-    border-bottom: 1px solid #eee;
-}
-
-.table th {
-    background: #f8f9fa;
-    font-weight: 600;
-    color: #333;
-}
-
-.status-badge {
-    padding: 6px 12px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-}
-
-.status-pending { background: #fff3cd; color: #856404; }
-.status-progress { background: #d1ecf1; color: #0c5460; }
-.status-completed { background: #d4edda; color: #155724; }
-.status-approved { background: #d4edda; color: #155724; }
-.status-unpaid { background: #f8d7da; color: #721c24; }
-.status-paid { background: #d4edda; color: #155724; }
-
-/* Modal Styles */
-.modal {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.5);
-    z-index: 2000;
-}
-
-.modal-content {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: white;
-    border-radius: 15px;
-    box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-    width: 90%;
-    max-width: 500px;
-    max-height: 90vh;
-    overflow-y: auto;
-}
-
-.modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 20px 30px;
-    border-bottom: 1px solid #eee;
-}
-
-.modal-title {
-    margin: 0;
-    color: #333;
-}
-
-.modal-close {
-    background: none;
-    border: none;
-    font-size: 24px;
-    cursor: pointer;
-    color: #666;
-}
-
-.modal-content form {
-    padding: 20px 30px;
-}
-
-/* Notification Styles */
-.notification-container {
-    position: fixed;
-    top: 90px;
-    right: 20px;
-    z-index: 1500;
-    max-width: 400px;
-}
-
-.notification {
-    background: white;
-    border-radius: 10px;
-    box-shadow: 0 5px 20px rgba(0,0,0,0.1);
-    padding: 15px 20px;
-    margin-bottom: 10px;
-    border-left: 4px solid #667eea;
-    animation: slideIn 0.3s ease;
-}
-
-.notification.success {
-    border-left-color: #28a745;
-}
-
-.notification.error {
-    border-left-color: #dc3545;
-}
-
-.notification.warning {
-    border-left-color: #ffc107;
-}
-
-@keyframes slideIn {
-    from {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
+    
+    // Load page-specific data
+    loadPageData(pageId);
+}
+
+function updateUserInfo() {
+    document.getElementById('userName').textContent = currentUser.name;
+    document.getElementById('userRole').textContent = currentUser.role === 'admin' ? 'ผู้ดูแลระบบ' : 'ผู้อยู่อาศัย';
+    document.getElementById('userAvatar').textContent = currentUser.avatar;
+    
+    // Show/hide admin menu items
+    const adminMenus = document.querySelectorAll('.admin-menu');
+    const residentMenus = document.querySelectorAll('.resident-menu');
+    
+    if (currentUser.role === 'admin') {
+        adminMenus.forEach(menu => menu.classList.remove('hidden'));
+        residentMenus.forEach(menu => menu.classList.add('hidden'));
+    } else {
+        adminMenus.forEach(menu => menu.classList.add('hidden'));
+        residentMenus.forEach(menu => menu.classList.remove('hidden'));
     }
 }
 
-/* Chat Styles */
-.chat-container {
-    height: 400px;
-    border: 1px solid #eee;
-    border-radius: 10px;
-    display: flex;
-    flex-direction: column;
-}
-
-.chat-messages {
-    flex: 1;
-    padding: 20px;
-    overflow-y: auto;
-    background: #f8f9fa;
-}
-
-.chat-message {
-    margin-bottom: 15px;
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-}
-
-.chat-message.own {
-    flex-direction: row-reverse;
-}
-
-.chat-message .message-content {
-    background: white;
-    padding: 10px 15px;
-    border-radius: 15px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-    max-width: 70%;
-}
-
-.chat-message.own .message-content {
-    background: #667eea;
-    color: white;
-}
-
-.chat-input {
-    display: flex;
-    padding: 20px;
-    gap: 10px;
-    border-top: 1px solid #eee;
-}
-
-.chat-input input {
-    flex: 1;
-    padding: 10px 15px;
-    border: 1px solid #eee;
-    border-radius: 25px;
-    outline: none;
-}
-
-.chat-input button {
-    padding: 10px 20px;
-    background: #667eea;
-    color: white;
-    border: none;
-    border-radius: 25px;
-    cursor: pointer;
-}
-
-/* Calendar Styles */
-.calendar-container {
-    background: white;
-    border-radius: 15px;
-    overflow: hidden;
-}
-
-.calendar-header {
-    background: #667eea;
-    color: white;
-    padding: 20px;
-    text-align: center;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.calendar-nav {
-    background: none;
-    border: none;
-    color: white;
-    font-size: 20px;
-    cursor: pointer;
-    padding: 5px 10px;
-    border-radius: 5px;
-    transition: background 0.3s;
-}
-
-.calendar-nav:hover {
-    background: rgba(255,255,255,0.2);
-}
-
-.calendar-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-}
-
-.calendar-day {
-    padding: 15px;
-    text-align: center;
-    border-bottom: 1px solid #eee;
-    border-right: 1px solid #eee;
-    cursor: pointer;
-    transition: background 0.3s;
-}
-
-.calendar-day:hover {
-    background: #f8f9fa;
-}
-
-.calendar-day.header {
-    background: #f8f9fa;
-    font-weight: bold;
-    cursor: default;
-}
-
-.calendar-day.today {
-    background: #667eea;
-    color: white;
-}
-
-.calendar-day.has-event {
-    background: #e3f2fd;
-    position: relative;
-}
-
-.calendar-day.has-event::after {
-    content: '';
-    position: absolute;
-    bottom: 5px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 6px;
-    height: 6px;
-    background: #667eea;
-    border-radius: 50%;
-}
-
-/* Utility Classes */
-.hidden { display: none !important; }
-.fade-in { animation: fadeIn 0.5s ease; }
-.mt-20 { margin-top: 20px; }
-.mb-20 { margin-bottom: 20px; }
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-    .sidebar {
-        transform: translateX(-100%);
-        transition: transform 0.3s ease;
-    }
-
-    .sidebar.open {
-        transform: translateX(0);
-    }
-
-    .main-content {
-        margin-left: 0;
-        padding: 20px;
-    }
-
-    .form-row {
-        flex-direction: column;
-        gap: 0;
-    }
-
-    .stats-grid {
-        grid-template-columns: 1fr;
+function loadPageData(pageId) {
+    switch(pageId) {
+        case 'dashboard-home':
+            loadDashboardStats();
+            break;
+        case 'profile':
+            loadProfileData();
+            break;
+        case 'calendar':
+            generateCalendar();
+            break;
     }
 }
->>>>>>> 44a7c6da55f79cb8633c33ad71c5d5453afadb01:FINAL PROJECT/Frontend/style.css
+
+// Form Handlers
+function handleRepairSubmit(e) {
+    e.preventDefault();
+    const title = document.getElementById('repairTitle').value;
+    const category = document.getElementById('repairCategory').value;
+    const description = document.getElementById('repairDescription').value;
+    
+    // Simulate adding to repair list
+    addRepairToTable({
+        id: '#' + String(Math.floor(Math.random() * 1000)).padStart(3, '0'),
+        title: title,
+        category: category,
+        date: new Date().toISOString().split('T')[0],
+        status: 'รอรับเรื่อง'
+    });
+    
+    showNotification('ส่งคำขอแจ้งซ่อมเรียบร้อยแล้ว', 'success');
+    document.getElementById('repairForm').reset();
+}
+
+function handleBookingSubmit(e) {
+    e.preventDefault();
+    const location = document.getElementById('bookingLocation').value;
+    const date = document.getElementById('bookingDate').value;
+    const timeStart = document.getElementById('bookingTimeStart').value;
+    const timeEnd = document.getElementById('bookingTimeEnd').value;
+    
+    // Add to booking table
+    addBookingToTable({
+        location: location,
+        date: date,
+        time: timeStart + '-' + timeEnd,
+        status: 'รอการอนุมัติ'
+    });
+    
+    showNotification('ส่งคำขอจองเรียบร้อยแล้ว', 'success');
+    document.getElementById('bookingForm').reset();
+}
+
+function handlePaymentSubmit(e) {
+    e.preventDefault();
+    showNotification('ส่งหลักฐานการชำระเงินเรียบร้อยแล้ว รอการตรวจสอบ', 'success');
+    closeModal('paymentModal');
+    document.getElementById('paymentForm').reset();
+}
+
+function handleProfileUpdate(e) {
+    e.preventDefault();
+    showNotification('อัปเดตข้อมูลส่วนตัวเรียบร้อยแล้ว', 'success');
+}
+
+function handlePasswordChange(e) {
+    e.preventDefault();
+    const currentPassword = document.getElementById('currentPassword').value;
+    const newPassword = document.getElementById('newPassword').value;
+    const confirmNewPassword = document.getElementById('confirmNewPassword').value;
+    
+    if (newPassword !== confirmNewPassword) {
+        showNotification('รหัสผ่านใหม่ไม่ตรงกัน', 'error');
+        return;
+    }
+    
+    showNotification('เปลี่ยนรหัสผ่านสำเร็จ', 'success');
+    document.getElementById('changePasswordForm').reset();
+}
+
+function handleVisitorSubmit(e) {
+    e.preventDefault();
+    showNotification('แจ้งผู้มาเยือนเรียบร้อยแล้ว', 'success');
+    document.getElementById('visitorForm').reset();
+}
+
+function handleIncidentSubmit(e) {
+    e.preventDefault();
+    showNotification('ส่งรายงานเหตุการณ์ผิดปกติเรียบร้อยแล้ว', 'success');
+    document.getElementById('incidentForm').reset();
+}
+
+function handleDocumentUpload(e) {
+    e.preventDefault();
+    const title = document.getElementById('docTitle').value;
+    const category = document.getElementById('docCategory').value;
+    
+    // Add to documents table
+    addDocumentToTable({
+        title: title,
+        category: category,
+        date: new Date().toISOString().split('T')[0],
+        size: '2.5 MB'
+    });
+    
+    showNotification('อัปโหลดเอกสารเรียบร้อยแล้ว', 'success');
+    document.getElementById('documentUploadForm').reset();
+}
+
+// Calendar Functions
+function generateCalendar() {
+    const calendarGrid = document.getElementById('calendarGrid');
+    const monthYearDisplay = document.getElementById('currentMonth');
+    
+    if (!calendarGrid || !monthYearDisplay) return;
+    
+    calendarGrid.innerHTML = '';
+    
+    // Update month display
+    monthYearDisplay.textContent = monthNames[currentMonth] + ' ' + (currentYear + 543);
+    
+    // Days of week header
+    const daysOfWeek = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+    daysOfWeek.forEach(day => {
+        const dayElement = document.createElement('div');
+        dayElement.className = 'calendar-day header';
+        dayElement.textContent = day;
+        calendarGrid.appendChild(dayElement);
+    });
+    
+    // Get first day of month and number of days
+    const firstDay = new Date(currentYear, currentMonth, 1).getDay();
+    const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+    const today = new Date();
+    
+    // Empty cells for days before month starts
+    for (let i = 0; i < firstDay; i++) {
+        const emptyDay = document.createElement('div');
+        emptyDay.className = 'calendar-day';
+        calendarGrid.appendChild(emptyDay);
+    }
+    
+    // Days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dayElement = document.createElement('div');
+        dayElement.className = 'calendar-day';
+        dayElement.textContent = day;
+        
+        // Check if today
+        if (currentYear === today.getFullYear() && 
+            currentMonth === today.getMonth() && 
+            day === today.getDate()) {
+            dayElement.classList.add('today');
+        }
+        
+        // Check if has event
+        const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        if (calendarEvents[dateStr]) {
+            dayElement.classList.add('has-event');
+            dayElement.title = calendarEvents[dateStr];
+        }
+        
+        calendarGrid.appendChild(dayElement);
+    }
+}
+
+function previousMonth() {
+    currentMonth--;
+    if (currentMonth < 0) {
+        currentMonth = 11;
+        currentYear--;
+    }
+    generateCalendar();
+}
+
+function nextMonth() {
+    currentMonth++;
+    if (currentMonth > 11) {
+        currentMonth = 0;
+        currentYear++;
+    }
+    generateCalendar();
+}
+
+// Chat Functions
+function sendMessage() {
+    const chatInput = document.getElementById('chatInput');
+    const message = chatInput.value.trim();
+    
+    if (message) {
+        const chatMessages = document.getElementById('chatMessages');
+        const messageTime = new Date().toLocaleTimeString('th-TH', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+        });
+        
+        // Add user message
+        const userMessage = document.createElement('div');
+        userMessage.className = 'chat-message own';
+        userMessage.innerHTML = `
+            <div class="user-avatar" style="min-width: 35px; height: 35px; font-size: 14px;">${currentUser.avatar}</div>
+            <div class="message-content">
+                <p>${message}</p>
+                <small>${messageTime}</small>
+            </div>
+        `;
+        chatMessages.appendChild(userMessage);
+        
+        // Auto-reply (simulate)
+        setTimeout(() => {
+            const adminReply = document.createElement('div');
+            adminReply.className = 'chat-message';
+            adminReply.innerHTML = `
+                <div class="user-avatar" style="min-width: 35px; height: 35px; font-size: 14px;">A</div>
+                <div class="message-content">
+                    <strong>เจ้าหน้าที่</strong>
+                    <p>ขอบคุณสำหรับข้อความค่ะ เราจะติดตามเรื่องนี้ให้</p>
+                    <small>${messageTime}</small>
+                </div>
+            `;
+            chatMessages.appendChild(adminReply);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }, 1000);
+        
+        chatInput.value = '';
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+}
+
+function openGroupChat(groupId) {
+    showNotification(`เปิดแชทกลุ่ม: ${groupId}`, 'info');
+}
+
+// Payment Functions
+function payBill(billId) {
+    const modal = document.getElementById('paymentModal');
+    modal.classList.remove('hidden');
+    modal.style.display = 'block';
+    
+    // Set payment amount based on bill
+    const amounts = {
+        'common_fee_nov': '1,500',
+        'parking_fee': '300'
+    };
+    
+    document.getElementById('paymentAmount').value = amounts[billId] + ' บาท';
+}
+
+function closeModal(modalId) {
+    const modal = document.getElementById(modalId);
+    modal.classList.add('hidden');
+    modal.style.display = 'none';
+}
+
+// Voting Functions
+function submitVote(voteType) {
+    const selectedOption = document.querySelector(`input[name="${voteType}"]:checked`);
+    if (selectedOption) {
+        showNotification('บันทึกการโหวตเรียบร้อยแล้ว', 'success');
+    } else {
+        showNotification('กรุณาเลือกตัวเลือกก่อนโหวต', 'warning');
+    }
+}
+
+// Utility Functions
+function addRepairToTable(repair) {
+    const tbody = document.getElementById('repairStatusTable');
+    const row = document.createElement('tr');
+    row.innerHTML = `
+        <td>${repair.id}</td>
+        <td>${repair.title}</td>
+        <td>${repair.category}</td>
+        <td>${repair.date}</td>
+        <td><span class="status-badge status-pending">${repair.status}</span></td>
+        <td><button class="btn btn-secondary btn-sm">ดูรายละเอียด</button></td>
+    `;
+    tbody.appendChild(row);
+}
+
+function addBookingToTable(booking) {
+    const tbody = document.getElementById('bookingTable');
+    const row = document.createElement('tr');
+    row.innerHTML = `
+        <td>${booking.location}</td>
+        <td>${booking.date}</td>
+        <td>${booking.time}</td>
+        <td><span class="status-badge status-pending">${booking.status}</span></td>
+        <td><button class="btn btn-secondary btn-sm">แก้ไข</button></td>
+    `;
+    tbody.appendChild(row);
+}
+
+function addDocumentToTable(doc) {
+    const tbody = document.getElementById('documentsTable');
+    const row = document.createElement('tr');
+    row.innerHTML = `
+        <td>${doc.title}</td>
+        <td>${doc.category}</td>
+        <td>${doc.date}</td>
+        <td>${doc.size}</td>
+        <td>
+            <button class="btn btn-secondary btn-sm">ดู</button>
+            <button class="btn btn-primary btn-sm">ดาวน์โหลด</button>
+            <button class="btn btn-secondary btn-sm">ลบ</button>
+        </td>
+    `;
+    tbody.appendChild(row);
+}
+
+function loadDashboardStats() {
+    // Simulate loading dashboard statistics
+    const stats = {
+        totalResidents: Math.floor(Math.random() * 50) + 200,
+        pendingRepairs: Math.floor(Math.random() * 20) + 5,
+        completedRepairs: Math.floor(Math.random() * 100) + 100,
+        unpaidBills: Math.floor(Math.random() * 15) + 3
+    };
+    
+    document.getElementById('totalResidents').textContent = stats.totalResidents;
+    document.getElementById('pendingRepairs').textContent = stats.pendingRepairs;
+    document.getElementById('completedRepairs').textContent = stats.completedRepairs;
+    document.getElementById('unpaidBills').textContent = stats.unpaidBills;
+}
+
+function loadProfileData() {
+    // Load user profile data
+    document.getElementById('profileName').value = currentUser.name || '';
+    document.getElementById('profilePhone').value = '081-234-5678';
+    document.getElementById('profileEmail').value = 'user@example.com';
+    document.getElementById('profileAddress').value = 'A-101';
+}
+
+function showNotification(message, type = 'info') {
+    const container = document.getElementById('notificationContainer');
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span>${message}</span>
+            <button onclick="this.parentElement.parentElement.remove()" style="background: none; border: none; cursor: pointer; margin-left: 15px;">&times;</button>
+        </div>
+    `;
+    
+    container.appendChild(notification);
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+        if (notification.parentElement) {
+            notification.remove();
+        }
+    }, 5000);
+}
+
+function togglePasswordVisibility(inputId) {
+    const input = document.getElementById(inputId);
+    const icon = input.nextElementSibling;
+    
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.classList.remove('fa-eye');
+        icon.classList.add('fa-eye-slash');
+    } else {
+        input.type = 'password';
+        icon.classList.remove('fa-eye-slash');
+        icon.classList.add('fa-eye');
+    }
+}
+
+function showForgotPassword() {
+    showNotification('ส่งลิงก์รีเซ็ตรหัสผ่านไปยังอีเมลของคุณแล้ว', 'info');
+}
+
+function toggleNotifications() {
+    showNotification('ไม่มีการแจ้งเตือนใหม่', 'info');
+}
+
+// Click outside modal to close
+window.onclick = function(event) {
+    const modals = document.querySelectorAll('.modal');
+    modals.forEach(modal => {
+        if (event.target === modal) {
+            modal.style.display = 'none';
+            modal.classList.add('hidden');
+        }
+    });
+};
+
+// File upload preview
+function handleFileUpload(inputId, previewId) {
+    const input = document.getElementById(inputId);
+    const preview = document.getElementById(previewId);
+    
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            if (preview) {
+                preview.innerHTML = `<img src="${e.target.result}" style="max-width: 200px; max-height: 200px;">`;
+            }
+        };
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+
+// Responsive sidebar toggle
+function toggleSidebar() {
+    const sidebar = document.getElementById('sidebar');
+    sidebar.classList.toggle('open');
+}
+
+// Add click event for mobile menu toggle
+document.addEventListener('DOMContentLoaded', function() {
+    if (window.innerWidth <= 768) {
+        const header = document.querySelector('.header-content h1');
+        if (header) {
+            header.style.cursor = 'pointer';
+            header.addEventListener('click', toggleSidebar);
+        }
+    }
+});
+
+// Handle window resize
+window.addEventListener('resize', function() {
+    if (window.innerWidth > 768) {
+        const sidebar = document.getElementById('sidebar');
+        sidebar.classList.remove('open');
+    }
+});

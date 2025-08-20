@@ -1,3 +1,4 @@
+<<<<<<< HEAD:Frontend/index.html
 <!DOCTYPE html>
 <html lang="th">
 <head>
@@ -6,9 +7,109 @@
     <title>SMART VILLAGE</title>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <!-- เพิ่ม Chart.js สำหรับหน้า Reports -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- เพิ่ม Socket.IO client library สำหรับ Real-time communication -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        /* เพิ่มสไตล์สำหรับกระดิ่งแจ้งเตือน */
+        .notification-bell {
+            position: relative;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: background-color 0.3s;
+        }
+        
+        .notification-bell:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .notification-count {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: #dc3545;
+            color: white;
+            border-radius: 50%;
+            min-width: 20px;
+            height: 20px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Styles for notifications container added to style.css initially.
+           Ensure it's well-styled for pop-ups. */
+        .notification-container {
+            position: fixed;
+            top: 90px;
+            right: 20px;
+            z-index: 1500;
+            max-width: 400px;
+            /* Added for better visibility and management of multiple notifications */
+            display: flex;
+            flex-direction: column-reverse; /* New notifications appear at the bottom */
+            gap: 10px;
+        }
+
+        .notification {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            padding: 15px 20px;
+            border-left: 4px solid #667eea;
+            animation: slideIn 0.3s ease-out forwards; /* Changed for smoother animation */
+            opacity: 0; /* Start hidden for animation */
+            transform: translateX(100%); /* Start off-screen for animation */
+        }
+        
+        .notification.success { border-left-color: #28a745; }
+        .notification.error { border-left-color: #dc3545; }
+        .notification.warning { border-left-color: #ffc107; }
+        .notification.info { border-left-color: #007bff; } /* Added for info notifications */
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* CSS for modal (make sure it's not hidden by default if using display:none) */
+        .modal {
+            display: none; /* Controlled by JS */
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+            transform: translateY(-20px); /* Add slight animation for modal */
+            opacity: 0;
+            animation: fadeInModal 0.3s ease-out forwards;
+        }
+
+        @keyframes fadeInModal {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+    </style>
 </head>
 <body>
-    <!-- Login Page -->
+    <div id="notificationContainer" class="notification-container"></div>
+
     <div id="loginPage" class="login-container">
         <div class="login-card fade-in">
             <div class="logo">
@@ -41,7 +142,6 @@
         </div>
     </div>
 
-    <!-- Register Page -->
     <div id="registerPage" class="login-container hidden">
         <div class="register-card fade-in">
             <div class="logo">
@@ -80,13 +180,15 @@
         </div>
     </div>
 
-    <!-- Dashboard -->
     <div id="dashboard" class="dashboard hidden">
-        <!-- Header -->
         <div class="header">
             <div class="header-content">
                 <h1><i class="fas fa-home"></i> ระบบจัดการหมู่บ้านจัดสรร</h1>
                 <div class="user-info">
+                    <div class="notification-bell" onclick="toggleNotifications()">
+                        <i class="fas fa-bell"></i>
+                        <span id="notificationCount" class="notification-count hidden">0</span>
+                    </div>
                     <div class="user-avatar" id="userAvatar">A</div>
                     <div>
                         <div id="userName">ผู้ใช้งาน</div>
@@ -99,7 +201,6 @@
             </div>
         </div>
 
-        <!-- Sidebar -->
         <div class="sidebar" id="sidebar">
             <ul class="sidebar-menu">
                 <li><a href="#" onclick="showPage('dashboard-home')" class="active"><i class="fas fa-tachometer-alt"></i> แดชบอร์ด</a></li>
@@ -108,15 +209,20 @@
                 <li><a href="#" onclick="showPage('announcements')"><i class="fas fa-bullhorn"></i> ประกาศ</a></li>
                 <li class="resident-menu"><a href="#" onclick="showPage('payments')"><i class="fas fa-credit-card"></i> ชำระเงิน</a></li>
                 <li class="resident-menu"><a href="#" onclick="showPage('booking')"><i class="fas fa-calendar"></i> จองพื้นที่</a></li>
+                <li><a href="#" onclick="showPage('calendar')"><i class="fas fa-calendar-alt"></i> ปฏิทินกิจกรรม</a></li>
+                <li><a href="#" onclick="showPage('chat')"><i class="fas fa-comments"></i> แชท</a></li>
+                <li><a href="#" onclick="showPage('documents')"><i class="fas fa-folder"></i> เอกสาร</a></li>
+                <li><a href="#" onclick="showPage('security')"><i class="fas fa-shield-alt"></i> ความปลอดภัย</a></li>
+                <li><a href="#" onclick="showPage('voting')"><i class="fas fa-vote-yea"></i> โหวต</a></li>
                 <li class="admin-menu hidden"><a href="#" onclick="showPage('manage-users')"><i class="fas fa-users"></i> จัดการผู้ใช้</a></li>
                 <li class="admin-menu hidden"><a href="#" onclick="showPage('manage-repairs')"><i class="fas fa-tools"></i> จัดการแจ้งซ่อม</a></li>
                 <li class="admin-menu hidden"><a href="#" onclick="showPage('reports')"><i class="fas fa-chart-bar"></i> รายงาน</a></li>
             </ul>
         </div>
 
-        <!-- Main Content -->
-        <div class="main-content">
-            <!-- Dashboard Home -->
+        <!-- Main content area where dynamic pages will be loaded -->
+        <div class="main-content" id="mainContent">
+            <!-- Initial dashboard-home content (can be loaded dynamically or kept static) -->
             <div id="dashboard-home" class="page-content">
                 <div class="page-title">
                     <h2>แดชบอร์ด</h2>
@@ -162,7 +268,1277 @@
                     </div>
                 </div>
 
-                <!-- Recent Activities -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">กิจกรรมล่าสุด</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>เวลา</th>
+                                    <th>กิจกรรม</th>
+                                    <th>ผู้ใช้</th>
+                                    <th>สถานะ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentActivities">
+                                <tr>
+                                    <td>10:30</td>
+                                    <td>แจ้งซ่อมไฟฟ้า</td>
+                                    <td>คุณสมชาย ใจดี</td>
+                                    <td><span class="status-badge status-pending">รอรับเรื่อง</span></td>
+                                </tr>
+                                <tr>
+                                    <td>09:15</td>
+                                    <td>ชำระค่าส่วนกลาง</td>
+                                    <td>คุณมาลี สวยใส</td>
+                                    <td><span class="status-badge status-completed">สำเร็จ</span></td>
+                                </tr>
+                                <tr>
+                                    <td>08:45</td>
+                                    <td>จองสนามกีฬา</td>
+                                    <td>คุณวิชัย กล้าหาญ</td>
+                                    <td><span class="status-badge status-approved">อนุมัติ</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <!-- Other page content divs will be appended here by showPage function -->
+            <div id="profile" class="page-content hidden">
+                <div class="page-title">
+                    <h2>ข้อมูลส่วนตัว</h2>
+                    <p>จัดการข้อมูลส่วนตัวของคุณ</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">แก้ไขข้อมูลส่วนตัว</h3>
+                    </div>
+                    <form id="profileForm" style="padding: 20px 30px;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="profileName">ชื่อ-นามสกุล</label>
+                                <input type="text" class="form-control" id="profileName">
+                            </div>
+                            <div class="form-group">
+                                <label for="profilePhone">เบอร์ติดต่อ</label>
+                                <input type="tel" class="form-control" id="profilePhone">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="profileEmail">อีเมล</label>
+                                <input type="email" class="form-control" id="profileEmail">
+                            </div>
+                            <div class="form-group">
+                                <label for="profileAddress">ที่อยู่</label>
+                                <input type="text" class="form-control" id="profileAddress">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>อัปโหลดเอกสาร</label>
+                            <div class="file-upload" onclick="document.getElementById('profileDocuments').click()">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <p>คลิกเพื่อเลือกไฟล์<br><small>บัตรประชาชน, ทะเบียนบ้าน</small></p>
+                                <input type="file" id="profileDocuments" multiple style="display: none;" accept=".pdf,.jpg,.png">
+                            </div>
+                            <div id="profileDocumentsPreview" style="margin-top: 10px;"></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">บันทึกข้อมูล</button>
+                    </form>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">เปลี่ยนรหัสผ่าน</h3>
+                    </div>
+                    <form id="changePasswordForm" style="padding: 20px 30px;">
+                        <div class="form-group">
+                            <label for="currentPassword">รหัสผ่านปัจจุบัน</label>
+                            <input type="password" class="form-control" id="currentPassword" required>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="newPassword">รหัสผ่านใหม่</label>
+                                <input type="password" class="form-control" id="newPassword" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="confirmNewPassword">ยืนยันรหัสผ่านใหม่</label>
+                                <input type="password" class="form-control" id="confirmNewPassword" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">เปลี่ยนรหัสผ่าน</button>
+                    </form>
+                </div>
+            </div>
+
+            <div id="repair-request" class="page-content hidden">
+                <div class="page-title">
+                    <h2>แจ้งซ่อม</h2>
+                    <p>แจ้งปัญหาและติดตามสถานะงานซ่อม</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">แจ้งปัญหาใหม่</h3>
+                    </div>
+                    <form id="repairForm" style="padding: 20px 30px;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="repairTitle">หัวข้อปัญหา</label>
+                                <input type="text" class="form-control" id="repairTitle" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="repairCategory">หมวดหมู่</label>
+                                <select class="form-control" id="repairCategory" required>
+                                    <option value="">เลือกหมวดหมู่</option>
+                                    <option value="ไฟฟ้า">ไฟฟ้า</option>
+                                    <option value="น้ำประปา">น้ำประปา</option>
+                                    <option value="แอร์">แอร์</option>
+                                    <option value="อื่นๆ">อื่นๆ</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="repairDescription">รายละเอียดปัญหา</label>
+                            <textarea class="form-control" id="repairDescription" rows="4" required></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>อัปโหลดรูปภาพ</label>
+                            <div class="file-upload" onclick="document.getElementById('repairImages').click()">
+                                <i class="fas fa-camera"></i>
+                                <p>คลิกเพื่อเลือกไฟล์<br><small>รองรับ .jpg, .png</small></p>
+                                <input type="file" id="repairImages" multiple style="display: none;" accept=".jpg,.png">
+                            </div>
+                            <div id="repairImagesPreview" style="margin-top: 10px;"></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">ส่งคำขอแจ้งซ่อม</button>
+                    </form>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">สถานะงานซ่อมของคุณ</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>รหัส</th>
+                                    <th>หัวข้อ</th>
+                                    <th>หมวดหมู่</th>
+                                    <th>วันที่แจ้ง</th>
+                                    <th>สถานะ</th>
+                                    <th>การดำเนินการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="repairStatusTable">
+                                <tr>
+                                    <td>#001</td>
+                                    <td>ไฟทางเดินเสีย</td>
+                                    <td>ไฟฟ้า</td>
+                                    <td>2023-10-26</td>
+                                    <td><span class="status-badge status-pending">รอรับเรื่อง</span></td>
+                                    <td><button class="btn btn-secondary btn-sm">ดูรายละเอียด</button></td>
+                                </tr>
+                                <tr>
+                                    <td>#002</td>
+                                    <td>น้ำรั่วซึม</td>
+                                    <td>น้ำประปา</td>
+                                    <td>2023-10-20</td>
+                                    <td><span class="status-badge status-progress">กำลังดำเนินการ</span></td>
+                                    <td><button class="btn btn-secondary btn-sm">ดูรายละเอียด</button></td>
+                                </tr>
+                                <tr>
+                                    <td>#003</td>
+                                    <td>แอร์ไม่เย็น</td>
+                                    <td>แอร์</td>
+                                    <td>2023-10-15</td>
+                                    <td><span class="status-badge status-completed">เสร็จสิ้น</span></td>
+                                    <td><button class="btn btn-secondary btn-sm">ดูรายละเอียด</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="announcements" class="page-content hidden">
+                <div class="page-title">
+                    <h2>ประกาศ</h2>
+                    <p>ข่าวสารและประกาศสำคัญของหมู่บ้าน</p>
+                </div>
+
+                <!-- Admin: Add New Announcement Button -->
+                <div class="card admin-menu hidden">
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3 class="card-title">จัดการประกาศ</h3>
+                        <button class="btn btn-primary" onclick="showAddAnnouncementModal()">
+                            <i class="fas fa-plus"></i> เพิ่มประกาศใหม่
+                        </button>
+                    </div>
+                    <!-- This section can be used for a table of all announcements for admin to manage -->
+                    <div class="table-container" style="padding: 20px;">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>หัวข้อ</th>
+                                    <th>วันที่</th>
+                                    <th>โดย</th>
+                                    <th>การดำเนินการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adminAnnouncementsTable">
+                                <!-- Announcements will be dynamically loaded here for admin to manage -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">ประกาศล่าสุด</h3>
+                    </div>
+                    <div id="announcementsList" style="padding: 20px 30px;">
+                        <!-- Existing announcements (and new ones) will be loaded here -->
+                        <div class="announcement-item" style="border-left: 4px solid #667eea; padding-left: 20px; margin-bottom: 25px;">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                                <h4 style="color: #333; margin: 0;">ประชุมคณะกรรมการประจำเดือน</h4>
+                                <span style="color: #666; font-size: 14px;">2023-10-26</span>
+                            </div>
+                            <p style="color: #666; line-height: 1.6; margin-bottom: 10px;">
+                                เรียนเชิญสมาชิกทุกท่านเข้าร่วมประชุมคณะกรรมการประจำเดือน พฤศจิกายน 2567
+                                ในวันที่ 15 พฤศจิกายน 2567 เวลา 19:00 น. ณ ห้องประชุมอาคาร A
+                            </p>
+                            <div style="display: flex; gap: 10px;">
+                                <span class="status-badge" style="background: #e3f2fd; color: #1976d2;">สำคัญ</span>
+                                <span style="color: #666; font-size: 14px;"><i class="fas fa-user"></i> โดย: คณะกรรมการ</span>
+                            </div>
+                            <!-- Admin actions for each announcement item -->
+                            <div class="admin-actions hidden" style="margin-top: 15px;">
+                                <button class="btn btn-secondary btn-sm" onclick="editAnnouncement('announcement1')">แก้ไข</button>
+                                <button class="btn btn-secondary btn-sm" onclick="deleteAnnouncement('announcement1')">ลบ</button>
+                            </div>
+                        </div>
+
+                        <div class="announcement-item" style="border-left: 4px solid #28a745; padding-left: 20px; margin-bottom: 25px;">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                                <h4 style="color: #333; margin: 0;">กิจกรรมทำความสะอาดหมู่บ้าน</h4>
+                                <span style="color: #666; font-size: 14px;">2023-10-24</span>
+                            </div>
+                            <p style="color: #666; line-height: 1.6; margin-bottom: 10px;">
+                                ขอเชิญชวนสมาชิกทุกครอบครัวร่วมกิจกรรมทำความสะอาดหมู่บ้าน
+                                ในวันเสาร์ที่ 18 พฤศจิกายน 2567 เวลา 08:00-12:00 น.
+                                จุดนัดพบ: ลานจอดรถกลาง
+                            </p>
+                            <div style="display: flex; gap: 10px;">
+                                <span class="status-badge" style="background: #e8f5e8; color: #2e7d32;">กิจกรรม</span>
+                                <span style="color: #666; font-size: 14px;"><i class="fas fa-user"></i> โดย: คณะกรรมการ</span>
+                            </div>
+                            <!-- Admin actions for each announcement item -->
+                            <div class="admin-actions hidden" style="margin-top: 15px;">
+                                <button class="btn btn-secondary btn-sm" onclick="editAnnouncement('announcement2')">แก้ไข</button>
+                                <button class="btn btn-secondary btn-sm" onclick="deleteAnnouncement('announcement2')">ลบ</button>
+                            </div>
+                        </div>
+
+                        <div class="announcement-item" style="border-left: 4px solid #ffc107; padding-left: 20px; margin-bottom: 25px;">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                                <h4 style="color: #333; margin: 0;">แจ้งปรับปรุงระบบน้ำประปา</h4>
+                                <span style="color: #666; font-size: 14px;">2023-10-22</span>
+                            </div>
+                            <p style="color: #666; line-height: 1.6; margin-bottom: 10px;">
+                                จะมีการปรับปรุงระบบน้ำประปาในวันที่ 5-6 พฤศจิกายน 2567
+                                เวลา 09:00-17:00 น. อาจมีการหยุดจ่ายน้ำชั่วคราว
+                                ขออภัยในความไม่สะดวก
+                            </p>
+                            <div style="display: flex; gap: 10px;">
+                                <span class="status-badge" style="background: #fff3cd; color: #856404;">แจ้งเตือน</span>
+                                <span style="color: #666; font-size: 14px;"><i class="fas fa-user"></i> โดย: ฝ่ายซ่อมบำรุง</span>
+                            </div>
+                            <!-- Admin actions for each announcement item -->
+                            <div class="admin-actions hidden" style="margin-top: 15px;">
+                                <button class="btn btn-secondary btn-sm" onclick="editAnnouncement('announcement3')">แก้ไข</button>
+                                <button class="btn btn-secondary btn-sm" onclick="deleteAnnouncement('announcement3')">ลบ</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="payments" class="page-content hidden">
+                <div class="page-title">
+                    <h2>ชำระเงิน</h2>
+                    <p>จัดการการชำระค่าส่วนกลางและค่าบริการต่างๆ</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">บิลค้างชำระ</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>รายการ</th>
+                                    <th>ยอดเงิน</th>
+                                    <th>กำหนดชำระ</th>
+                                    <th>สถานะ</th>
+                                    <th>การดำเนินการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="paymentTable">
+                                <tr>
+                                    <td>ค่าส่วนกลาง เดือน พ.ย. 67</td>
+                                    <td>1,500 บาท</td>
+                                    <td>2023-11-30</td>
+                                    <td><span class="status-badge status-unpaid">ยังไม่ชำระ</span></td>
+                                    <td><button class="btn btn-primary btn-sm" onclick="payBill('common_fee_nov')">ชำระเงิน</button></td>
+                                </tr>
+                                <tr>
+                                    <td>ค่าจอดรถเพิ่มเติม</td>
+                                    <td>300 บาท</td>
+                                    <td>2023-11-15</td>
+                                    <td><span class="status-badge status-unpaid">ยังไม่ชำระ</span></td>
+                                    <td><button class="btn btn-primary btn-sm" onclick="payBill('parking_fee')">ชำระเงิน</button></td>
+                                </tr>
+                                <tr>
+                                    <td>ค่าส่วนกลาง เดือน ต.ค. 67</td>
+                                    <td>1,500 บาท</td>
+                                    <td>2023-10-31</td>
+                                    <td><span class="status-badge status-paid">ชำระแล้ว</span></td>
+                                    <td><button class="btn btn-secondary btn-sm">ดูใบเสร็จ</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">ประวัติการชำระเงิน</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>วันที่ชำระ</th>
+                                    <th>รายการ</th>
+                                    <th>ยอดเงิน</th>
+                                    <th>วิธีชำระ</th>
+                                    <th>ใบเสร็จ</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>2023-10-25</td>
+                                    <td>ค่าส่วนกลาง เดือน ต.ค. 67</td>
+                                    <td>1,500 บาท</td>
+                                    <td>โอนเงิน</td>
+                                    <td><button class="btn btn-secondary btn-sm">ดาวน์โหลด</button></td>
+                                </tr>
+                                <tr>
+                                    <td>2023-09-28</td>
+                                    <td>ค่าส่วนกลาง เดือน ก.ย. 67</td>
+                                    <td>1,500 บาท</td>
+                                    <td>โอนเงิน</td>
+                                    <td><button class="btn btn-secondary btn-sm">ดาวน์โหลด</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="booking" class="page-content hidden">
+                <div class="page-title">
+                    <h2>จองพื้นที่</h2>
+                    <p>จองสถานที่และอุปกรณ์ภายในหมู่บ้าน</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">จองสถานที่</h3>
+                    </div>
+                    <form id="bookingForm" style="padding: 20px 30px;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="bookingLocation">เลือกสถานที่</label>
+                                <select class="form-control" id="bookingLocation" required>
+                                    <option value="">เลือกสถานที่</option>
+                                    <option value="สนามกีฬา">สนามกีฬา</option>
+                                    <option value="สระว่ายน้ำ">สระว่ายน้ำ</option>
+                                    <option value="คลับเฮ้าส์">คลับเฮ้าส์</option>
+                                    <option value="ห้องประชุม">ห้องประชุม</option>
+                                    <option value="สนามเด็กเล่น">สนามเด็กเล่น</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="bookingDate">วันที่</label>
+                                <input type="date" class="form-control" id="bookingDate" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="bookingTimeStart">เวลาเริ่ม</label>
+                                <input type="time" class="form-control" id="bookingTimeStart" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="bookingTimeEnd">เวลาสิ้นสุด</label>
+                                <input type="time" class="form-control" id="bookingTimeEnd" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="bookingPurpose">วัตถุประสงค์</label>
+                            <textarea class="form-control" id="bookingPurpose" rows="3" required></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="attendeeCount">จำนวนผู้เข้าร่วม</label>
+                            <input type="number" class="form-control" id="attendeeCount" min="1" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">ส่งคำขอจอง</button>
+                    </form>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">การจองของคุณ</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>สถานที่</th>
+                                    <th>วันที่</th>
+                                    <th>เวลา</th>
+                                    <th>สถานะ</th>
+                                    <th>การดำเนินการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bookingTable">
+                                <tr>
+                                    <td>สนามกีฬา</td>
+                                    <td>2023-11-05</td>
+                                    <td>14:00-16:00</td>
+                                    <td><span class="status-badge status-approved">อนุมัติ</span></td>
+                                    <td><button class="btn btn-secondary btn-sm">ยกเลิก</button></td>
+                                </tr>
+                                <tr>
+                                    <td>คลับเฮ้าส์</td>
+                                    <td>2023-11-12</td>
+                                    <td>18:00-22:00</td>
+                                    <td><span class="status-badge status-pending">รอการอนุมัติ</span></td>
+                                    <td><button class="btn btn-secondary btn-sm">แก้ไข</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="calendar" class="page-content hidden">
+                <div class="page-title">
+                    <h2>ปฏิทินกิจกรรม</h2>
+                    <p>กิจกรรมและเหตุการณ์สำคัญของหมู่บ้าน</p>
+                </div>
+
+                <div class="card">
+                    <div class="calendar-container">
+                        <div class="calendar-header">
+                            <button class="calendar-nav" onclick="previousMonth()">
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                            <h3 id="currentMonth">พฤศจิกายน 2567</h3>
+                            <button class="calendar-nav" onclick="nextMonth()">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                        <div class="calendar-grid" id="calendarGrid">
+                            </div>
+                    </div>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">กิจกรรมที่กำลังจะมาถึง</h3>
+                    </div>
+                    <div id="upcomingEvents">
+                        <div style="padding: 20px;">
+                            <div class="event-item" style="border-left: 4px solid #667eea; padding-left: 15px; margin-bottom: 15px;">
+                                <h4 style="margin: 0; color: #333;">ประชุมคณะกรรมการ</h4>
+                                <p style="margin: 5px 0; color: #666;">15 พฤศจิกายน 2567 - 19:00 น.</p>
+                                <p style="margin: 0; color: #888;">ห้องประชุมอาคาร A</p>
+                            </div>
+                            <div class="event-item" style="border-left: 4px solid #28a745; padding-left: 15px; margin-bottom: 15px;">
+                                <h4 style="margin: 0; color: #333;">ทำความสะอาดหมู่บ้าน</h4>
+                                <p style="margin: 5px 0; color: #666;">18 พฤศจิกายน 2567 - 08:00 น.</p>
+                                <p style="margin: 0; color: #888;">จุดนัดพบ: ลานจอดรถกลาง</p>
+                            </div>
+                            <div class="event-item" style="border-left: 4px solid #ffc107; padding-left: 15px; margin-bottom: 15px;">
+                                <h4 style="margin: 0; color: #333;">งานเลี้ยงสังสรรค์ปีใหม่</h4>
+                                <p style="margin: 5px 0; color: #666;">31 ธันวาคม 2567 - 18:00 น.</p>
+                                <p style="margin: 0; color: #888;">คลับเฮ้าส์</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="chat" class="page-content hidden">
+                <div class="page-title">
+                    <h2>แชท</h2>
+                    <p>สื่อสารกับเจ้าหน้าที่และเพื่อนบ้าน</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">แชทกับเจ้าหน้าที่</h3>
+                    </div>
+                    <div class="chat-container">
+                        <div class="chat-messages" id="chatMessages">
+                            <!-- Chat messages will be dynamically loaded here -->
+                            <div class="chat-message">
+                                <div class="user-avatar" style="min-width: 35px; height: 35px; font-size: 14px;">A</div>
+                                <div class="message-content">
+                                    <strong>เจ้าหน้าที่</strong>
+                                    <p>สวัสดีค่ะ มีอะไรให้ช่วยเหลือไหมคะ?</p>
+                                    <small>10:30 น.</small>
+                                </div>
+                            </div>
+                            <div class="chat-message own">
+                                <div class="user-avatar" style="min-width: 35px; height: 35px; font-size: 14px;">U</div>
+                                <div class="message-content">
+                                    <p>สอบถามเรื่องการจองสระว่ายน้ำหน่อยครับ</p>
+                                    <small>10:32 น.</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chat-input">
+                            <input type="text" id="chatInput" placeholder="พิมพ์ข้อความ...">
+                            <button onclick="sendMessage()">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">กลุ่มแชท</h3>
+                    </div>
+                    <div style="padding: 20px;">
+                        <div class="chat-group" style="padding: 15px; border: 1px solid #eee; border-radius: 10px; margin-bottom: 10px; cursor: pointer;" onclick="openGroupChat('general')">
+                            <h4 style="margin: 0; color: #667eea;">💬 แชททั่วไป</h4>
+                            <p style="margin: 5px 0 0; color: #666;">สมาชิก 248 คน</p>
+                        </div>
+                        <div class="chat-group" style="padding: 15px; border: 1px solid #eee; border-radius: 10px; margin-bottom: 10px; cursor: pointer;" onclick="openGroupChat('building-a')">
+                            <h4 style="margin: 0; color: #28a745;">🏢 อาคาร A</h4>
+                            <p style="margin: 5px 0 0; color: #666;">สมาชิก 62 คน</p>
+                        </div>
+                        <div class="chat-group" style="padding: 15px; border: 1px solid #eee; border-radius: 10px; margin-bottom: 10px; cursor: pointer;" onclick="openGroupChat('committee')">
+                            <h4 style="margin: 0; color: #ffc107;">👥 คณะกรรมการ</h4>
+                            <p style="margin: 5px 0 0; color: #666;">สมาชิก 12 คน</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="documents" class="page-content hidden">
+                <div class="page-title">
+                    <h2>เอกสาร</h2>
+                    <p>จัดการเอกสารและไฟล์สำคัญ</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">อัปโหลดเอกสาร</h3>
+                    </div>
+                    <form id="documentUploadForm" style="padding: 20px 30px;">
+                        <div class="form-group">
+                            <label for="docTitle">ชื่อเอกสาร</label>
+                            <input type="text" class="form-control" id="docTitle" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="docCategory">หมวดหมู่</label>
+                            <select class="form-control" id="docCategory" required>
+                                <option value="">เลือกหมวดหมู่</option>
+                                <option value="personal">เอกสารส่วนตัว</option>
+                                <option value="contract">สัญญา</option>
+                                <option value="receipt">ใบเสร็จ</option>
+                                <option value="other">อื่นๆ</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>อัปโหลดไฟล์</label>
+                            <div class="file-upload" onclick="document.getElementById('documentFile').click()">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <p>คลิกเพื่อเลือกไฟล์<br><small>รองรับ PDF, JPG, PNG</small></p>
+                                <input type="file" id="documentFile" style="display: none;" accept=".pdf,.jpg,.png,.doc,.docx">
+                            </div>
+                            <div id="documentFilePreview" style="margin-top: 10px;"></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">บันทึกเอกสาร</button>
+                    </form>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">เอกสารของคุณ</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>ชื่อเอกสาร</th>
+                                    <th>หมวดหมู่</th>
+                                    <th>วันที่อัปโหลด</th>
+                                    <th>ขนาดไฟล์</th>
+                                    <th>การดำเนินการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="documentsTable">
+                                <tr>
+                                    <td>สำเนาบัตรประชาชน</td>
+                                    <td>เอกสารส่วนตัว</td>
+                                    <td>2023-10-15</td>
+                                    <td>2.5 MB</td>
+                                    <td>
+                                        <button class="btn btn-secondary btn-sm">ดู</button>
+                                        <button class="btn btn-primary btn-sm">ดาวน์โหลด</button>
+                                        <button class="btn btn-secondary btn-sm">ลบ</button>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>ใบเสร็จค่าส่วนกลาง</td>
+                                    <td>ใบเสร็จ</td>
+                                    <td>2023-10-10</td>
+                                    <td>1.2 MB</td>
+                                    <td>
+                                        <button class="btn btn-secondary btn-sm">ดู</button>
+                                        <button class="btn btn-primary btn-sm">ดาวน์โหลด</button>
+                                        <button class="btn btn-secondary btn-sm">ลบ</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="security" class="page-content hidden">
+                <div class="page-title">
+                    <h2>ความปลอดภัย</h2>
+                    <p>จัดการความปลอดภัยและผู้มาเยือน</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">แจ้งผู้มาเยือน</h3>
+                    </div>
+                    <form id="visitorForm" style="padding: 20px 30px;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="visitorName">ชื่อผู้มาเยือน</label>
+                                <input type="text" class="form-control" id="visitorName" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="visitorPhone">เบอร์ติดต่อ</label>
+                                <input type="tel" class="form-control" id="visitorPhone" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="visitDate">วันที่มาเยือน</label>
+                                <input type="date" class="form-control" id="visitDate" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="visitTime">เวลา</label>
+                                <input type="time" class="form-control" id="visitTime" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="visitPurpose">วัตถุประสงค์การมาเยือน</label>
+                            <textarea class="form-control" id="visitPurpose" rows="3" required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">แจ้งผู้มาเยือน</button>
+                    </form>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">รายงานเหตุการณ์ผิดปกติ</h3>
+                    </div>
+                    <form id="incidentForm" style="padding: 20px 30px;">
+                        <div class="form-group">
+                            <label for="incidentType">ประเภทเหตุการณ์</label>
+                            <select class="form-control" id="incidentType" required>
+                                <option value="">เลือกประเภท</option>
+                                <option value="theft">การโจรกรรม</option>
+                                <option value="damage">ความเสียหาย</option>
+                                <option value="noise">เสียงรบกวน</option>
+                                <option value="safety">ความปลอดภัย</option>
+                                <option value="other">อื่นๆ</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="incidentLocation">สถานที่เกิดเหตุ</label>
+                            <input type="text" class="form-control" id="incidentLocation" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="incidentDescription">รายละเอียดเหตุการณ์</label>
+                            <textarea class="form-control" id="incidentDescription" rows="4" required></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>หลักฐาน (รูปภาพ/วิดีโอ)</label>
+                            <div class="file-upload" onclick="document.getElementById('incidentEvidence').click()">
+                                <i class="fas fa-camera"></i>
+                                <p>คลิกเพื่อเลือกไฟล์<br><small>รองรับ JPG, PNG, MP4</small></p>
+                                <input type="file" id="incidentEvidence" multiple style="display: none;" accept=".jpg,.png,.mp4">
+                            </div>
+                            <div id="incidentEvidencePreview" style="margin-top: 10px;"></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">ส่งรายงาน</button>
+                    </form>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">QR Code เข้า-ออกหมู่บ้าน</h3>
+                    </div>
+                    <div style="padding: 20px 30px; text-align: center;">
+                        <div style="background: white; padding: 20px; border-radius: 10px; display: inline-block; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                            <div style="width: 200px; height: 200px; background: #f8f9fa; border: 2px dashed #dee2e6; display: flex; align-items: center; justify-content: center; margin-bottom: 15px;">
+                                <i class="fas fa-qrcode" style="font-size: 60px; color: #667eea;"></i>
+                            </div>
+                            <p><strong>QR Code ส่วนตัว</strong></p>
+                            <p style="color: #666; font-size: 14px;">แสดงรหัสนี้เพื่อเข้า-ออกหมู่บ้าน</p>
+                            <button class="btn btn-primary btn-sm">รีเซ็ต QR Code</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="voting" class="page-content hidden">
+                <div class="page-title">
+                    <h2>โหวต</h2>
+                    <p>มีส่วนร่วมในการตัดสินใจของหมู่บ้าน</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">การโหวตที่เปิดอยู่</h3>
+                    </div>
+                    <div style="padding: 20px 30px;">
+                        <div class="voting-item" style="border: 1px solid #eee; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                            <h4 style="color: #333; margin-bottom: 10px;">เลือกสีทาสนามเด็กเล่นใหม่</h4>
+                            <p style="color: #666; margin-bottom: 15px;">กำหนดปิดโหวต: 30 พฤศจิกายน 2567</p>
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+                                    <input type="radio" name="playground_color" value="blue" style="margin-right: 8px;">
+                                    สีน้ำเงิน (12 โหวต)
+                                </label>
+                                <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+                                    <input type="radio" name="playground_color" value="green" style="margin-right: 8px;">
+                                    สีเขียว (18 โหวต)
+                                </label>
+                                <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+                                    <input type="radio" name="playground_color" value="yellow" style="margin-right: 8px;">
+                                    สีเหลือง (8 โหวต)
+                                </label>
+                            </div>
+                            <button class="btn btn-primary btn-sm" onclick="submitVote('playground_color')">โหวต</button>
+                            <span style="margin-left: 15px; color: #666;">รวม 38 โหวต</span>
+                        </div>
+
+                        <div class="voting-item" style="border: 1px solid #eee; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                            <h4 style="color: #333; margin-bottom: 10px;">งบประมาณปรับปรุงสระว่ายน้ำ</h4>
+                            <p style="color: #666; margin-bottom: 15px;">กำหนดปิดโหวต: 15 ธันวาคม 2567</p>
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+                                    <input type="radio" name="pool_budget" value="approve" style="margin-right: 8px;">
+                                    เห็นด้วย (งบประมาณ 500,000 บาท) - 25 โหวต
+                                </label>
+                                <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+                                    <input type="radio" name="pool_budget" value="disapprove" style="margin-right: 8px;">
+                                    ไม่เห็นด้วย - 8 โหวต
+                                </label>
+                            </div>
+                            <button class="btn btn-primary btn-sm" onclick="submitVote('pool_budget')">โหวต</button>
+                            <span style="margin-left: 15px; color: #666;">รวม 33 โหวต</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">ประวัติการโหวต</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>หัวข้อ</th>
+                                    <th>วันที่โหวต</th>
+                                    <th>ตัวเลือกที่เลือก</th>
+                                    <th>ผลโหวต</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>เลือกคณะกรรมการชุดใหม่</td>
+                                    <td>2023-09-15</td>
+                                    <td>รายชื่อ A</td>
+                                    <td><span class="status-badge status-approved">ผ่าน</span></td>
+                                </tr>
+                                <tr>
+                                    <td>ปรับค่าส่วนกลาง</td>
+                                    <td>2023-08-20</td>
+                                    <td>ไม่เห็นด้วย</td>
+                                    <td><span class="status-badge status-unpaid">ไม่ผ่าน</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="manage-users" class="page-content hidden">
+                <div class="page-title">
+                    <h2>จัดการผู้ใช้</h2>
+                    <p>จัดการข้อมูลผู้อยู่อาศัยและสิทธิ์การใช้งาน</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">รายชื่อผู้ใช้ทั้งหมด</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>ชื่อ-นามสกุล</th>
+                                    <th>ที่อยู่</th>
+                                    <th>เบอร์ติดต่อ</th>
+                                    <th>สถานะ</th>
+                                    <th>บทบาท</th>
+                                    <th>การดำเนินการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="manageUsersTable">
+                                <tr>
+                                    <td>นายสมชาย ใจดี</td>
+                                    <td>A-101</td>
+                                    <td>081-234-5678</td>
+                                    <td><span class="status-badge status-approved">อนุมัติ</span></td>
+                                    <td>ผู้อยู่อาศัย</td>
+                                    <td>
+                                        <button class="btn btn-secondary btn-sm">แก้ไข</button>
+                                        <button class="btn btn-secondary btn-sm">ระงับ</button>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>นางมาลี สวยใส</td>
+                                    <td>B-205</td>
+                                    <td>089-876-5432</td>
+                                    <td><span class="status-badge status-pending">รอการอนุมัติ</span></td>
+                                    <td>ผู้อยู่อาศัย</td>
+                                    <td>
+                                        <button class="btn btn-primary btn-sm">อนุมัติ</button>
+                                        <button class="btn btn-secondary btn-sm">ปฏิเสธ</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="manage-repairs" class="page-content hidden">
+                <div class="page-title">
+                    <h2>จัดการแจ้งซ่อม</h2>
+                    <p>ติดตามและจัดการคำขอแจ้งซ่อมทั้งหมด</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">รายการแจ้งซ่อมทั้งหมด</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>รหัส</th>
+                                    <th>ผู้แจ้ง</th>
+                                    <th>หัวข้อ</th>
+                                    <th>หมวดหมู่</th>
+                                    <th>วันที่แจ้ง</th>
+                                    <th>สถานะ</th>
+                                    <th>การดำเนินการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="manageRepairsTable">
+                                <tr>
+                                    <td>#001</td>
+                                    <td>นายสมชาย ใจดี</td>
+                                    <td>ไฟทางเดินเสีย</td>
+                                    <td>ไฟฟ้า</td>
+                                    <td>2023-10-26</td>
+                                    <td><span class="status-badge status-pending">รอรับเรื่อง</span></td>
+                                    <td>
+                                        <button class="btn btn-primary btn-sm">รับเรื่อง</button>
+                                        <button class="btn btn-secondary btn-sm">ดูรายละเอียด</button>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>#002</td>
+                                    <td>นางมาลี สวยใส</td>
+                                    <td>น้ำรั่วซึม</td>
+                                    <td>น้ำประปา</td>
+                                    <td>2023-10-20</td>
+                                    <td><span class="status-badge status-progress">กำลังดำเนินการ</span></td>
+                                    <td>
+                                        <button class="btn btn-primary btn-sm">เสร็จสิ้น</button>
+                                        <button class="btn btn-secondary btn-sm">ดูรายละเอียด</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="reports" class="page-content hidden">
+                <div class="page-title">
+                    <h2>รายงาน</h2>
+                    <p>สรุปและวิเคราะห์ข้อมูลการจัดการหมู่บ้าน</p>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon blue">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3>95%</h3>
+                            <p>อัตราการชำระเงิน</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3>2.5 วัน</h3>
+                            <p>เวลาเฉลี่ยแก้ไขปัญหา</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon orange">
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3>4.8/5</h3>
+                            <p>คะแนนความพึงพอใจ</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon red">
+                            <i class="fas fa-calendar-check"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3>85%</h3>
+                            <p>อัตราการใช้สิ่งอำนวยความสะดวก</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">สรุปรายเดือน</h3>
+                    </div>
+                    <div style="padding: 20px 30px;">
+                        <canvas id="monthlyChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for adding/editing announcements -->
+    <div id="announcementModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="announcementModalTitle">เพิ่มประกาศใหม่</h3>
+                <button class="modal-close" onclick="closeModal('announcementModal')">&times;</button>
+            </div>
+            <form id="announcementForm">
+                <input type="hidden" id="announcementId">
+                <div class="form-group">
+                    <label for="announcementTitle">หัวข้อประกาศ</label>
+                    <input type="text" class="form-control" id="announcementTitle" required>
+                </div>
+                <div class="form-group">
+                    <label for="announcementContent">รายละเอียด</label>
+                    <textarea class="form-control" id="announcementContent" rows="5" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="announcementDate">วันที่ประกาศ</label>
+                    <input type="date" class="form-control" id="announcementDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="announcementAuthor">ผู้ประกาศ</label>
+                    <input type="text" class="form-control" id="announcementAuthor" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="announcementTag">แท็ก (เช่น สำคัญ, กิจกรรม, แจ้งเตือน)</label>
+                    <input type="text" class="form-control" id="announcementTag">
+                </div>
+                <button type="submit" class="btn btn-primary">บันทึกประกาศ</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="paymentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">ชำระเงิน</h3>
+                <button class="modal-close" onclick="closeModal('paymentModal')">&times;</button>
+            </div>
+            <form id="paymentForm">
+                <div class="form-group">
+                    <label for="paymentAmount">จำนวนเงิน</label>
+                    <input type="text" class="form-control" id="paymentAmount" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="paymentMethod">วิธีการชำระ</label>
+                    <select class="form-control" id="paymentMethod" required onchange="showQRCode()">
+                     <option value="">เลือกวิธีการชำระ</option>
+                     <option value="bank_transfer">โอนเงินผ่านธนาคาร</option>
+                     <option value="credit_card">บัตรเครดิต</option>
+                     <option value="promptpay">พร้อมเพย์</option>
+                    </select>
+                </div>
+                <div id="qrCodeContainer" style="display:none; margin-top: 20px;">
+                    <h4>สแกน QR Code เพื่อชำระเงิน</h4>
+                    <img src="QR_PAYMENT.jpg" alt="PromptPay QR Code" style="max-width: 300px;">
+                </div>
+                <div id="bankDetails" class="form-group hidden">
+                    <label>ข้อมูลบัญชีธนาคาร</label>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                        <p><strong>ธนาคารกสิกรไทย</strong></p>
+                        <p>SMART VILLAGE</p>
+                        <p>เลขบัญชี: 139-1-56465-1</p>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="paymentSlip">หลักฐานการโอนเงิน</label>
+                    <div class="file-upload" onclick="document.getElementById('paymentSlipFile').click()">
+                        <i class="fas fa-receipt"></i>
+                        <p>อัปโหลดสลิป<br><small>รองรับ JPG, PNG</small></p>
+                        <input type="file" id="paymentSlipFile" style="display: none;" accept=".jpg,.png">
+                    </div>
+                    <div id="paymentSlipPreview" style="margin-top: 10px;"></div>
+                </div>
+                <button type="submit" class="btn btn-primary">ยืนยันการชำระ</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <script>
+        // Initial setup when the DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            // loadDataFromLocalStorage(); // ไม่ใช้ Local Storage แล้ว
+            
+            // ตรวจสอบสถานะการเข้าสู่ระบบและแสดงหน้าเว็บที่เหมาะสม
+            // ตรวจสอบจาก sessionStorage แทน localStorage (เพื่อความปลอดภัยที่ดีขึ้น)
+            const storedUserData = sessionStorage.getItem('userData');
+            if (sessionStorage.getItem('isLoggedIn') === 'true' && storedUserData) {
+                currentUser = JSON.parse(storedUserData); // อัปเดตข้อมูลผู้ใช้ปัจจุบัน
+                showDashboard(); // แสดงหน้าแดชบอร์ด
+            } else {
+                showLogin(); // แสดงหน้าเข้าสู่ระบบ
+            }
+
+            setupEventListeners(); // ตั้งค่า Event Listeners ทั้งหมด
+            // Initialize Socket.IO connection
+            initializeSocketIO();
+        });
+    </script>
+</body>
+</html>
+=======
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMART VILLAGE</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="notificationContainer" class="notification-container"></div>
+
+    <div id="loginPage" class="login-container">
+        <div class="login-card fade-in">
+            <div class="logo">
+                <h1><i class="fas fa-home"></i></h1>
+                <h1>SMART VILLAGE</h1>
+                <p>ระบบจัดการหมู่บ้านออนไลน์</p>
+            </div>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">ชื่อผู้ใช้</label>
+                    <input type="text" class="form-control" id="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">รหัสผ่าน</label>
+                    <div class="password-wrapper">
+                        <input type="password" class="form-control" id="password" required>
+                        <i class="fas fa-eye toggle-password" onclick="togglePasswordVisibility('password')"></i>
+                    </div>
+                </div>
+                <div class="form-group" style="display: flex; align-items: center;">
+                    <input type="checkbox" id="rememberMe" style="margin-right: 8px;">
+                    <label for="rememberMe" style="margin-bottom: 0;">จำฉันไว้</label>
+                </div>
+                <button type="submit" class="btn btn-primary">เข้าสู่ระบบ</button>
+                <div style="display: flex; justify-content: space-between;">
+                    <button type="button" class="btn btn-secondary" onclick="showRegister()">ลงทะเบียน</button>
+                    <a href="#" onclick="showForgotPassword()" style="align-self: center; color: #667eea;">ลืมรหัสผ่าน?</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="registerPage" class="login-container hidden">
+        <div class="register-card fade-in">
+            <div class="logo">
+                <h1><i class="fas fa-user-plus"></i></h1>
+                <h1>ลงทะเบียน</h1>
+                <p>สมัครสมาชิกใหม่</p>
+            </div>
+            <form id="registerForm">
+                <div class="form-group">
+                    <label for="regName">ชื่อ-นามสกุล</label>
+                    <input type="text" class="form-control" id="regName" required>
+                </div>
+                <div class="form-group">
+                    <label for="regUsername">ชื่อผู้ใช้</label>
+                    <input type="text" class="form-control" id="regUsername" required>
+                </div>
+                <div class="form-group">
+                    <label for="regPassword">รหัสผ่าน</label>
+                    <input type="password" class="form-control" id="regPassword" required>
+                </div>
+                <div class="form-group">
+                    <label for="regConfirmPassword">ยืนยันรหัสผ่าน</label>
+                    <input type="password" class="form-control" id="regConfirmPassword" required>
+                </div>
+                <div class="form-group">
+                    <label for="regPhone">เบอร์ติดต่อ</label>
+                    <input type="tel" class="form-control" id="regPhone" required>
+                </div>
+                <div class="form-group">
+                    <label for="regAddress">ที่อยู่ (บ้านเลขที่)</label>
+                    <input type="text" class="form-control" id="regAddress" required>
+                </div>
+                <button type="submit" class="btn btn-primary">ส่งคำขอลงทะเบียน</button>
+                <button type="button" class="btn btn-secondary" onclick="showLogin()">กลับไปเข้าสู่ระบบ</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="dashboard" class="dashboard hidden">
+        <div class="header">
+            <div class="header-content">
+                <h1><i class="fas fa-home"></i> ระบบจัดการหมู่บ้านจัดสรร</h1>
+                <div class="user-info">
+                    <div class="notification-bell" onclick="toggleNotifications()">
+                        <i class="fas fa-bell"></i>
+                        <span id="notificationCount" class="notification-count hidden">0</span>
+                    </div>
+                    <div class="user-avatar" id="userAvatar">A</div>
+                    <div>
+                        <div id="userName">ผู้ใช้งาน</div>
+                        <small id="userRole">บทบาท</small>
+                    </div>
+                    <button class="btn btn-secondary" onclick="logout()" style="margin-left: 15px; padding: 8px 16px;">
+                        <i class="fas fa-sign-out-alt"></i> ออกจากระบบ
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar" id="sidebar">
+            <ul class="sidebar-menu">
+                <li><a href="#" onclick="showPage('dashboard-home')" class="active"><i class="fas fa-tachometer-alt"></i> แดชบอร์ด</a></li>
+                <li><a href="#" onclick="showPage('profile')"><i class="fas fa-user"></i> ข้อมูลส่วนตัว</a></li>
+                <li class="resident-menu"><a href="#" onclick="showPage('repair-request')"><i class="fas fa-wrench"></i> แจ้งซ่อม</a></li>
+                <li><a href="#" onclick="showPage('announcements')"><i class="fas fa-bullhorn"></i> ประกาศ</a></li>
+                <li class="resident-menu"><a href="#" onclick="showPage('payments')"><i class="fas fa-credit-card"></i> ชำระเงิน</a></li>
+                <li class="resident-menu"><a href="#" onclick="showPage('booking')"><i class="fas fa-calendar"></i> จองพื้นที่</a></li>
+                <li><a href="#" onclick="showPage('calendar')"><i class="fas fa-calendar-alt"></i> ปฏิทินกิจกรรม</a></li>
+                <li><a href="#" onclick="showPage('chat')"><i class="fas fa-comments"></i> แชท</a></li>
+                <li><a href="#" onclick="showPage('documents')"><i class="fas fa-folder"></i> เอกสาร</a></li>
+                <li><a href="#" onclick="showPage('security')"><i class="fas fa-shield-alt"></i> ความปลอดภัย</a></li>
+                <li><a href="#" onclick="showPage('voting')"><i class="fas fa-vote-yea"></i> โหวต</a></li>
+                <li class="admin-menu hidden"><a href="#" onclick="showPage('manage-users')"><i class="fas fa-users"></i> จัดการผู้ใช้</a></li>
+                <li class="admin-menu hidden"><a href="#" onclick="showPage('manage-repairs')"><i class="fas fa-tools"></i> จัดการแจ้งซ่อม</a></li>
+                <li class="admin-menu hidden"><a href="#" onclick="showPage('reports')"><i class="fas fa-chart-bar"></i> รายงาน</a></li>
+            </ul>
+        </div>
+
+        <div class="main-content" style="width: calc(100% - 280px);">
+            <div id="dashboard-home" class="page-content">
+                <div class="page-title">
+                    <h2>แดชบอร์ด</h2>
+                    <p>ภาพรวมระบบจัดการหมู่บ้านจัดสรร</p>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon blue">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalResidents">248</h3>
+                            <p>ผู้อยู่อาศัย</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon orange">
+                            <i class="fas fa-wrench"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="pendingRepairs">12</h3>
+                            <p>งานซ่อมรอดำเนินการ</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="completedRepairs">156</h3>
+                            <p>งานซ่อมเสร็จสิ้น</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon red">
+                            <i class="fas fa-exclamation-circle"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="unpaidBills">8</h3>
+                            <p>บิลค้างชำระ</p>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="card">
                     <div class="card-header">
                         <h3 class="card-title">กิจกรรมล่าสุด</h3>
@@ -202,7 +1578,369 @@
                 </div>
             </div>
 
-            <!-- Profile Page -->
+            <div id="calendar" class="page-content hidden">
+                <div class="page-title">
+                    <h2>ปฏิทินกิจกรรม</h2>
+                    <p>กิจกรรมและเหตุการณ์สำคัญของหมู่บ้าน</p>
+                </div>
+
+                <div class="card">
+                    <div class="calendar-container">
+                        <div class="calendar-header">
+                            <button class="calendar-nav" onclick="previousMonth()">
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                            <h3 id="currentMonth">พฤศจิกายน 2567</h3>
+                            <button class="calendar-nav" onclick="nextMonth()">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                        <div class="calendar-grid" id="calendarGrid">
+                            </div>
+                    </div>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">กิจกรรมที่กำลังจะมาถึง</h3>
+                    </div>
+                    <div id="upcomingEvents">
+                        <div style="padding: 20px;">
+                            <div class="event-item" style="border-left: 4px solid #667eea; padding-left: 15px; margin-bottom: 15px;">
+                                <h4 style="margin: 0; color: #333;">ประชุมคณะกรรมการ</h4>
+                                <p style="margin: 5px 0; color: #666;">15 พฤศจิกายน 2567 - 19:00 น.</p>
+                                <p style="margin: 0; color: #888;">ห้องประชุมอาคาร A</p>
+                            </div>
+                            <div class="event-item" style="border-left: 4px solid #28a745; padding-left: 15px; margin-bottom: 15px;">
+                                <h4 style="margin: 0; color: #333;">ทำความสะอาดหมู่บ้าน</h4>
+                                <p style="margin: 5px 0; color: #666;">18 พฤศจิกายน 2567 - 08:00 น.</p>
+                                <p style="margin: 0; color: #888;">จุดนัดพบ: ลานจอดรถกลาง</p>
+                            </div>
+                            <div class="event-item" style="border-left: 4px solid #ffc107; padding-left: 15px; margin-bottom: 15px;">
+                                <h4 style="margin: 0; color: #333;">งานเลี้ยงสังสรรค์ปีใหม่</h4>
+                                <p style="margin: 5px 0; color: #666;">31 ธันวาคม 2567 - 18:00 น.</p>
+                                <p style="margin: 0; color: #888;">คลับเฮ้าส์</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="chat" class="page-content hidden">
+                <div class="page-title">
+                    <h2>แชท</h2>
+                    <p>สื่อสารกับเจ้าหน้าที่และเพื่อนบ้าน</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">แชทกับเจ้าหน้าที่</h3>
+                    </div>
+                    <div class="chat-container">
+                        <div class="chat-messages" id="chatMessages">
+                            <div class="chat-message">
+                                <div class="user-avatar" style="min-width: 35px; height: 35px; font-size: 14px;">A</div>
+                                <div class="message-content">
+                                    <strong>เจ้าหน้าที่</strong>
+                                    <p>สวัสดีค่ะ มีอะไรให้ช่วยเหลือไหมคะ?</p>
+                                    <small>10:30 น.</small>
+                                </div>
+                            </div>
+                            <div class="chat-message own">
+                                <div class="user-avatar" style="min-width: 35px; height: 35px; font-size: 14px;">U</div>
+                                <div class="message-content">
+                                    <p>สอบถามเรื่องการจองสระว่ายน้ำหน่อยครับ</p>
+                                    <small>10:32 น.</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chat-input">
+                            <input type="text" id="chatInput" placeholder="พิมพ์ข้อความ...">
+                            <button onclick="sendMessage()">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">กลุ่มแชท</h3>
+                    </div>
+                    <div style="padding: 20px;">
+                        <div class="chat-group" style="padding: 15px; border: 1px solid #eee; border-radius: 10px; margin-bottom: 10px; cursor: pointer;" onclick="openGroupChat('general')">
+                            <h4 style="margin: 0; color: #667eea;">💬 แชททั่วไป</h4>
+                            <p style="margin: 5px 0 0; color: #666;">สมาชิก 248 คน</p>
+                        </div>
+                        <div class="chat-group" style="padding: 15px; border: 1px solid #eee; border-radius: 10px; margin-bottom: 10px; cursor: pointer;" onclick="openGroupChat('building-a')">
+                            <h4 style="margin: 0; color: #28a745;">🏢 อาคาร A</h4>
+                            <p style="margin: 5px 0 0; color: #666;">สมาชิก 62 คน</p>
+                        </div>
+                        <div class="chat-group" style="padding: 15px; border: 1px solid #eee; border-radius: 10px; margin-bottom: 10px; cursor: pointer;" onclick="openGroupChat('committee')">
+                            <h4 style="margin: 0; color: #ffc107;">👥 คณะกรรมการ</h4>
+                            <p style="margin: 5px 0 0; color: #666;">สมาชิก 12 คน</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="documents" class="page-content hidden">
+                <div class="page-title">
+                    <h2>เอกสาร</h2>
+                    <p>จัดการเอกสารและไฟล์สำคัญ</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">อัปโหลดเอกสาร</h3>
+                    </div>
+                    <form id="documentUploadForm" style="padding: 20px 30px;">
+                        <div class="form-group">
+                            <label for="docTitle">ชื่อเอกสาร</label>
+                            <input type="text" class="form-control" id="docTitle" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="docCategory">หมวดหมู่</label>
+                            <select class="form-control" id="docCategory" required>
+                                <option value="">เลือกหมวดหมู่</option>
+                                <option value="personal">เอกสารส่วนตัว</option>
+                                <option value="contract">สัญญา</option>
+                                <option value="receipt">ใบเสร็จ</option>
+                                <option value="other">อื่นๆ</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>อัปโหลดไฟล์</label>
+                            <div class="file-upload" onclick="document.getElementById('documentFile').click()">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <p>คลิกเพื่อเลือกไฟล์<br><small>รองรับ PDF, JPG, PNG</small></p>
+                                <input type="file" id="documentFile" style="display: none;" accept=".pdf,.jpg,.png,.doc,.docx">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">บันทึกเอกสาร</button>
+                    </form>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">เอกสารของคุณ</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>ชื่อเอกสาร</th>
+                                    <th>หมวดหมู่</th>
+                                    <th>วันที่อัปโหลด</th>
+                                    <th>ขนาดไฟล์</th>
+                                    <th>การดำเนินการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="documentsTable">
+                                <tr>
+                                    <td>สำเนาบัตรประชาชน</td>
+                                    <td>เอกสารส่วนตัว</td>
+                                    <td>2023-10-15</td>
+                                    <td>2.5 MB</td>
+                                    <td>
+                                        <button class="btn btn-secondary btn-sm">ดู</button>
+                                        <button class="btn btn-primary btn-sm">ดาวน์โหลด</button>
+                                        <button class="btn btn-secondary btn-sm">ลบ</button>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>ใบเสร็จค่าส่วนกลาง</td>
+                                    <td>ใบเสร็จ</td>
+                                    <td>2023-10-10</td>
+                                    <td>1.2 MB</td>
+                                    <td>
+                                        <button class="btn btn-secondary btn-sm">ดู</button>
+                                        <button class="btn btn-primary btn-sm">ดาวน์โหลด</button>
+                                        <button class="btn btn-secondary btn-sm">ลบ</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="security" class="page-content hidden">
+                <div class="page-title">
+                    <h2>ความปลอดภัย</h2>
+                    <p>จัดการความปลอดภัยและผู้มาเยือน</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">แจ้งผู้มาเยือน</h3>
+                    </div>
+                    <form id="visitorForm" style="padding: 20px 30px;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="visitorName">ชื่อผู้มาเยือน</label>
+                                <input type="text" class="form-control" id="visitorName" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="visitorPhone">เบอร์ติดต่อ</label>
+                                <input type="tel" class="form-control" id="visitorPhone" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="visitDate">วันที่มาเยือน</label>
+                                <input type="date" class="form-control" id="visitDate" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="visitTime">เวลา</label>
+                                <input type="time" class="form-control" id="visitTime" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="visitPurpose">วัตถุประสงค์การมาเยือน</label>
+                            <textarea class="form-control" id="visitPurpose" rows="3" required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">แจ้งผู้มาเยือน</button>
+                    </form>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">รายงานเหตุการณ์ผิดปกติ</h3>
+                    </div>
+                    <form id="incidentForm" style="padding: 20px 30px;">
+                        <div class="form-group">
+                            <label for="incidentType">ประเภทเหตุการณ์</label>
+                            <select class="form-control" id="incidentType" required>
+                                <option value="">เลือกประเภท</option>
+                                <option value="theft">การโจรกรรม</option>
+                                <option value="damage">ความเสียหาย</option>
+                                <option value="noise">เสียงรบกวน</option>
+                                <option value="safety">ความปลอดภัย</option>
+                                <option value="other">อื่นๆ</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="incidentLocation">สถานที่เกิดเหตุ</label>
+                            <input type="text" class="form-control" id="incidentLocation" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="incidentDescription">รายละเอียดเหตุการณ์</label>
+                            <textarea class="form-control" id="incidentDescription" rows="4" required></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>หลักฐาน (รูปภาพ/วิดีโอ)</label>
+                            <div class="file-upload" onclick="document.getElementById('incidentEvidence').click()">
+                                <i class="fas fa-camera"></i>
+                                <p>คลิกเพื่อเลือกไฟล์<br><small>รองรับ JPG, PNG, MP4</small></p>
+                                <input type="file" id="incidentEvidence" multiple style="display: none;" accept=".jpg,.png,.mp4">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">ส่งรายงาน</button>
+                    </form>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">QR Code เข้า-ออกหมู่บ้าน</h3>
+                    </div>
+                    <div style="padding: 20px 30px; text-align: center;">
+                        <div style="background: white; padding: 20px; border-radius: 10px; display: inline-block; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                            <div style="width: 200px; height: 200px; background: #f8f9fa; border: 2px dashed #dee2e6; display: flex; align-items: center; justify-content: center; margin-bottom: 15px;">
+                                <i class="fas fa-qrcode" style="font-size: 60px; color: #667eea;"></i>
+                            </div>
+                            <p><strong>QR Code ส่วนตัว</strong></p>
+                            <p style="color: #666; font-size: 14px;">แสดงรหัสนี้เพื่อเข้า-ออกหมู่บ้าน</p>
+                            <button class="btn btn-primary btn-sm">รีเซ็ต QR Code</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="voting" class="page-content hidden">
+                <div class="page-title">
+                    <h2>โหวต</h2>
+                    <p>มีส่วนร่วมในการตัดสินใจของหมู่บ้าน</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">การโหวตที่เปิดอยู่</h3>
+                    </div>
+                    <div style="padding: 20px 30px;">
+                        <div class="voting-item" style="border: 1px solid #eee; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                            <h4 style="color: #333; margin-bottom: 10px;">เลือกสีทาสนามเด็กเล่นใหม่</h4>
+                            <p style="color: #666; margin-bottom: 15px;">กำหนดปิดโหวต: 30 พฤศจิกายน 2567</p>
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+                                    <input type="radio" name="playground_color" value="blue" style="margin-right: 8px;">
+                                    สีน้ำเงิน (12 โหวต)
+                                </label>
+                                <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+                                    <input type="radio" name="playground_color" value="green" style="margin-right: 8px;">
+                                    สีเขียว (18 โหวต)
+                                </label>
+                                <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+                                    <input type="radio" name="playground_color" value="yellow" style="margin-right: 8px;">
+                                    สีเหลือง (8 โหวต)
+                                </label>
+                            </div>
+                            <button class="btn btn-primary btn-sm" onclick="submitVote('playground_color')">โหวต</button>
+                            <span style="margin-left: 15px; color: #666;">รวม 38 โหวต</span>
+                        </div>
+
+                        <div class="voting-item" style="border: 1px solid #eee; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                            <h4 style="color: #333; margin-bottom: 10px;">งบประมาณปรับปรุงสระว่ายน้ำ</h4>
+                            <p style="color: #666; margin-bottom: 15px;">กำหนดปิดโหวต: 15 ธันวาคม 2567</p>
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+                                    <input type="radio" name="pool_budget" value="approve" style="margin-right: 8px;">
+                                    เห็นด้วย (งบประมาณ 500,000 บาท) - 25 โหวต
+                                </label>
+                                <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+                                    <input type="radio" name="pool_budget" value="disapprove" style="margin-right: 8px;">
+                                    ไม่เห็นด้วย - 8 โหวต
+                                </label>
+                            </div>
+                            <button class="btn btn-primary btn-sm" onclick="submitVote('pool_budget')">โหวต</button>
+                            <span style="margin-left: 15px; color: #666;">รวม 33 โหวต</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">ประวัติการโหวต</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>หัวข้อ</th>
+                                    <th>วันที่โหวต</th>
+                                    <th>ตัวเลือกที่เลือก</th>
+                                    <th>ผลโหวต</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>เลือกคณะกรรมการชุดใหม่</td>
+                                    <td>2023-09-15</td>
+                                    <td>รายชื่อ A</td>
+                                    <td><span class="status-badge status-approved">ผ่าน</span></td>
+                                </tr>
+                                <tr>
+                                    <td>ปรับค่าส่วนกลาง</td>
+                                    <td>2023-08-20</td>
+                                    <td>ไม่เห็นด้วย</td>
+                                    <td><span class="status-badge status-unpaid">ไม่ผ่าน</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
             <div id="profile" class="page-content hidden">
                 <div class="page-title">
                     <h2>ข้อมูลส่วนตัว</h2>
@@ -213,7 +1951,7 @@
                     <div class="card-header">
                         <h3 class="card-title">แก้ไขข้อมูลส่วนตัว</h3>
                     </div>
-                    <form id="profileForm">
+                    <form id="profileForm" style="padding: 20px 30px;">
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="profileName">ชื่อ-นามสกุล</label>
@@ -238,7 +1976,7 @@
                             <label>อัปโหลดเอกสาร</label>
                             <div class="file-upload" onclick="document.getElementById('profileDocuments').click()">
                                 <i class="fas fa-cloud-upload-alt"></i>
-                                <p>คลิกเพื่ือเลือกไฟล์<br><small>บัตรประชาชน, ทะเบียนบ้าน</small></p>
+                                <p>คลิกเพื่อเลือกไฟล์<br><small>บัตรประชาชน, ทะเบียนบ้าน</small></p>
                                 <input type="file" id="profileDocuments" multiple style="display: none;" accept=".pdf,.jpg,.png">
                             </div>
                         </div>
@@ -250,7 +1988,7 @@
                     <div class="card-header">
                         <h3 class="card-title">เปลี่ยนรหัสผ่าน</h3>
                     </div>
-                    <form id="changePasswordForm">
+                    <form id="changePasswordForm" style="padding: 20px 30px;">
                         <div class="form-group">
                             <label for="currentPassword">รหัสผ่านปัจจุบัน</label>
                             <input type="password" class="form-control" id="currentPassword" required>
@@ -270,7 +2008,6 @@
                 </div>
             </div>
 
-            <!-- Repair Request Page -->
             <div id="repair-request" class="page-content hidden">
                 <div class="page-title">
                     <h2>แจ้งซ่อม</h2>
@@ -281,7 +2018,7 @@
                     <div class="card-header">
                         <h3 class="card-title">แจ้งปัญหาใหม่</h3>
                     </div>
-                    <form id="repairForm">
+                    <form id="repairForm" style="padding: 20px 30px;">
                         <div class="form-row">
                             <div class="form-group">
                                 <label for="repairTitle">หัวข้อปัญหา</label>
@@ -331,7 +2068,6 @@
                                 </tr>
                             </thead>
                             <tbody id="repairStatusTable">
-                                <!-- Example rows, will be populated by JS -->
                                 <tr>
                                     <td>#001</td>
                                     <td>ไฟทางเดินเสีย</td>
@@ -344,6 +2080,7 @@
                                     <td>#002</td>
                                     <td>น้ำรั่วซึม</td>
                                     <td>น้ำประปา</td>
+                                    <td>2023-10-20</td>
                                     <td>2023-10-20</td>
                                     <td><span class="status-badge status-progress">กำลังดำเนินการ</span></td>
                                     <td><button class="btn btn-secondary btn-sm">ดูรายละเอียด</button></td>
@@ -362,42 +2099,113 @@
                 </div>
             </div>
 
-            <!-- Announcements Page -->
             <div id="announcements" class="page-content hidden">
                 <div class="page-title">
                     <h2>ประกาศ</h2>
-                    <p>ประกาศและข่าวสารจากนิติบุคคล</p>
+                    <p>ข่าวสารและประกาศสำคัญของหมู่บ้าน</p>
                 </div>
 
-                <div class="card">
+                <!-- Admin: Add New Announcement Button -->
+                <div class="card admin-menu hidden">
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3 class="card-title">จัดการประกาศ</h3>
+                        <button class="btn btn-primary" onclick="showAddAnnouncementModal()">
+                            <i class="fas fa-plus"></i> เพิ่มประกาศใหม่
+                        </button>
+                    </div>
+                    <!-- This section can be used for a table of all announcements for admin to manage -->
+                    <div class="table-container" style="padding: 20px;">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>หัวข้อ</th>
+                                    <th>วันที่</th>
+                                    <th>โดย</th>
+                                    <th>การดำเนินการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adminAnnouncementsTable">
+                                <!-- Announcements will be dynamically loaded here for admin to manage -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card mt-20">
                     <div class="card-header">
                         <h3 class="card-title">ประกาศล่าสุด</h3>
                     </div>
-                    <div id="announcementList">
-                        <!-- Example announcements, will be populated by JS -->
-                        <div class="card mb-20">
-                            <div class="card-header">
-                                <h4 class="card-title">ประกาศเรื่อง: การชำระค่าส่วนกลางประจำปี</h4>
-                                <small>วันที่: 2023-10-25</small>
+                    <div id="announcementsList" style="padding: 20px 30px;">
+                        <!-- Existing announcements (and new ones) will be loaded here -->
+                        <div class="announcement-item" style="border-left: 4px solid #667eea; padding-left: 20px; margin-bottom: 25px;">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                                <h4 style="color: #333; margin: 0;">ประชุมคณะกรรมการประจำเดือน</h4>
+                                <span style="color: #666; font-size: 14px;">2023-10-26</span>
                             </div>
-                            <p>เรียน ท่านเจ้าของบ้านทุกท่าน, ขอแจ้งเรื่องการชำระค่าส่วนกลางประจำปี 2567 โดยสามารถชำระได้ตั้งแต่วันที่ 1 พฤศจิกายน 2566 ถึง 31 ธันวาคม 2566 หากมีข้อสงสัยสามารถติดต่อสำนักงานนิติบุคคลได้</p>
+                            <p style="color: #666; line-height: 1.6; margin-bottom: 10px;">
+                                เรียนเชิญสมาชิกทุกท่านเข้าร่วมประชุมคณะกรรมการประจำเดือน พฤศจิกายน 2567
+                                ในวันที่ 15 พฤศจิกายน 2567 เวลา 19:00 น. ณ ห้องประชุมอาคาร A
+                            </p>
+                            <div style="display: flex; gap: 10px;">
+                                <span class="status-badge" style="background: #e3f2fd; color: #1976d2;">สำคัญ</span>
+                                <span style="color: #666; font-size: 14px;"><i class="fas fa-user"></i> โดย: คณะกรรมการ</span>
+                            </div>
+                            <!-- Admin actions for each announcement item -->
+                            <div class="admin-actions hidden" style="margin-top: 15px;">
+                                <button class="btn btn-secondary btn-sm" onclick="editAnnouncement('announcement1')">แก้ไข</button>
+                                <button class="btn btn-secondary btn-sm" onclick="deleteAnnouncement('announcement1')">ลบ</button>
+                            </div>
                         </div>
-                        <div class="card mb-20">
-                            <div class="card-header">
-                                <h4 class="card-title">ประกาศเรื่อง: กิจกรรมทำความสะอาดหมู่บ้าน</h4>
-                                <small>วันที่: 2023-10-20</small>
+
+                        <div class="announcement-item" style="border-left: 4px solid #28a745; padding-left: 20px; margin-bottom: 25px;">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                                <h4 style="color: #333; margin: 0;">กิจกรรมทำความสะอาดหมู่บ้าน</h4>
+                                <span style="color: #666; font-size: 14px;">2023-10-24</span>
                             </div>
-                            <p>ขอเชิญชวนลูกบ้านทุกท่านร่วมกิจกรรมทำความสะอาดหมู่บ้านในวันเสาร์ที่ 4 พฤศจิกายน 2566 เวลา 09:00 น. เป็นต้นไป ณ สวนสาธารณะกลางหมู่บ้าน</p>
+                            <p style="color: #666; line-height: 1.6; margin-bottom: 10px;">
+                                ขอเชิญชวนสมาชิกทุกครอบครัวร่วมกิจกรรมทำความสะอาดหมู่บ้าน
+                                ในวันเสาร์ที่ 18 พฤศจิกายน 2567 เวลา 08:00-12:00 น.
+                                จุดนัดพบ: ลานจอดรถกลาง
+                            </p>
+                            <div style="display: flex; gap: 10px;">
+                                <span class="status-badge" style="background: #e8f5e8; color: #2e7d32;">กิจกรรม</span>
+                                <span style="color: #666; font-size: 14px;"><i class="fas fa-user"></i> โดย: คณะกรรมการ</span>
+                            </div>
+                            <!-- Admin actions for each announcement item -->
+                            <div class="admin-actions hidden" style="margin-top: 15px;">
+                                <button class="btn btn-secondary btn-sm" onclick="editAnnouncement('announcement2')">แก้ไข</button>
+                                <button class="btn btn-secondary btn-sm" onclick="deleteAnnouncement('announcement2')">ลบ</button>
+                            </div>
+                        </div>
+
+                        <div class="announcement-item" style="border-left: 4px solid #ffc107; padding-left: 20px; margin-bottom: 25px;">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                                <h4 style="color: #333; margin: 0;">แจ้งปรับปรุงระบบน้ำประปา</h4>
+                                <span style="color: #666; font-size: 14px;">2023-10-22</span>
+                            </div>
+                            <p style="color: #666; line-height: 1.6; margin-bottom: 10px;">
+                                จะมีการปรับปรุงระบบน้ำประปาในวันที่ 5-6 พฤศจิกายน 2567
+                                เวลา 09:00-17:00 น. อาจมีการหยุดจ่ายน้ำชั่วคราว
+                                ขออภัยในความไม่สะดวก
+                            </p>
+                            <div style="display: flex; gap: 10px;">
+                                <span class="status-badge" style="background: #fff3cd; color: #856404;">แจ้งเตือน</span>
+                                <span style="color: #666; font-size: 14px;"><i class="fas fa-user"></i> โดย: ฝ่ายซ่อมบำรุง</span>
+                            </div>
+                            <!-- Admin actions for each announcement item -->
+                            <div class="admin-actions hidden" style="margin-top: 15px;">
+                                <button class="btn btn-secondary btn-sm" onclick="editAnnouncement('announcement3')">แก้ไข</button>
+                                <button class="btn btn-secondary btn-sm" onclick="deleteAnnouncement('announcement3')">ลบ</button>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Payments Page -->
             <div id="payments" class="page-content hidden">
                 <div class="page-title">
                     <h2>ชำระเงิน</h2>
-                    <p>ตรวจสอบและชำระค่าใช้จ่ายต่างๆ</p>
+                    <p>จัดการการชำระค่าส่วนกลางและค่าบริการต่างๆ</p>
                 </div>
 
                 <div class="card">
@@ -408,31 +2216,34 @@
                         <table class="table">
                             <thead>
                                 <tr>
-                                    <th>รหัสบิล</th>
                                     <th>รายการ</th>
-                                    <th>จำนวนเงิน</th>
+                                    <th>ยอดเงิน</th>
                                     <th>กำหนดชำระ</th>
                                     <th>สถานะ</th>
                                     <th>การดำเนินการ</th>
                                 </tr>
                             </thead>
-                            <tbody id="unpaidBillsTable">
-                                <!-- Example rows, will be populated by JS -->
+                            <tbody id="paymentTable">
                                 <tr>
-                                    <td>#INV001</td>
-                                    <td>ค่าส่วนกลาง ต.ค. 66</td>
-                                    <td>\$1,500.00</td>
-                                    <td>2023-11-05</td>
+                                    <td>ค่าส่วนกลาง เดือน พ.ย. 67</td>
+                                    <td>1,500 บาท</td>
+                                    <td>2023-11-30</td>
                                     <td><span class="status-badge status-unpaid">ยังไม่ชำระ</span></td>
-                                    <td><button class="btn btn-primary btn-sm" onclick="openPaymentModal('#INV001', 'ค่าส่วนกลาง ต.ค. 66', 1500)">ชำระเงิน</button></td>
+                                    <td><button class="btn btn-primary btn-sm" onclick="payBill('common_fee_nov')">ชำระเงิน</button></td>
                                 </tr>
                                 <tr>
-                                    <td>#INV002</td>
-                                    <td>ค่าน้ำประปา ก.ย. 66</td>
-                                    <td>\$350.00</td>
-                                    <td>2023-10-31</td>
+                                    <td>ค่าจอดรถเพิ่มเติม</td>
+                                    <td>300 บาท</td>
+                                    <td>2023-11-15</td>
                                     <td><span class="status-badge status-unpaid">ยังไม่ชำระ</span></td>
-                                    <td><button class="btn btn-primary btn-sm" onclick="openPaymentModal('#INV002', 'ค่าน้ำประปา ก.ย. 66', 350)">ชำระเงิน</button></td>
+                                    <td><button class="btn btn-primary btn-sm" onclick="payBill('parking_fee')">ชำระเงิน</button></td>
+                                </tr>
+                                <tr>
+                                    <td>ค่าส่วนกลาง เดือน ต.ค. 67</td>
+                                    <td>1,500 บาท</td>
+                                    <td>2023-10-31</td>
+                                    <td><span class="status-badge status-paid">ชำระแล้ว</span></td>
+                                    <td><button class="btn btn-secondary btn-sm">ดูใบเสร็จ</button></td>
                                 </tr>
                             </tbody>
                         </table>
@@ -447,21 +2258,27 @@
                         <table class="table">
                             <thead>
                                 <tr>
-                                    <th>รหัสบิล</th>
-                                    <th>รายการ</th>
-                                    <th>จำนวนเงิน</th>
                                     <th>วันที่ชำระ</th>
-                                    <th>สถานะ</th>
+                                    <th>รายการ</th>
+                                    <th>ยอดเงิน</th>
+                                    <th>วิธีชำระ</th>
+                                    <th>ใบเสร็จ</th>
                                 </tr>
                             </thead>
-                            <tbody id="paymentHistoryTable">
-                                <!-- Example rows, will be populated by JS -->
+                            <tbody>
                                 <tr>
-                                    <td>#INV000</td>
-                                    <td>ค่าขยะ ก.ย. 66</td>
-                                    <td>\$100.00</td>
-                                    <td>2023-10-10</td>
-                                    <td><span class="status-badge status-paid">ชำระแล้ว</span></td>
+                                    <td>2023-10-25</td>
+                                    <td>ค่าส่วนกลาง เดือน ต.ค. 67</td>
+                                    <td>1,500 บาท</td>
+                                    <td>โอนเงิน</td>
+                                    <td><button class="btn btn-secondary btn-sm">ดาวน์โหลด</button></td>
+                                </tr>
+                                <tr>
+                                    <td>2023-09-28</td>
+                                    <td>ค่าส่วนกลาง เดือน ก.ย. 67</td>
+                                    <td>1,500 บาท</td>
+                                    <td>โอนเงิน</td>
+                                    <td><button class="btn btn-secondary btn-sm">ดาวน์โหลด</button></td>
                                 </tr>
                             </tbody>
                         </table>
@@ -469,46 +2286,51 @@
                 </div>
             </div>
 
-            <!-- Booking Page -->
             <div id="booking" class="page-content hidden">
                 <div class="page-title">
                     <h2>จองพื้นที่</h2>
-                    <p>จองพื้นที่ส่วนกลางของหมู่บ้าน</p>
+                    <p>จองสถานที่และอุปกรณ์ภายในหมู่บ้าน</p>
                 </div>
 
                 <div class="card">
                     <div class="card-header">
-                        <h3 class="card-title">จองพื้นที่ใหม่</h3>
+                        <h3 class="card-title">จองสถานที่</h3>
                     </div>
-                    <form id="bookingForm">
-                        <div class="form-group">
-                            <label for="bookingArea">พื้นที่ที่ต้องการจอง</label>
-                            <select class="form-control" id="bookingArea" required>
-                                <option value="">เลือกพื้นที่</option>
-                                <option value="สระว่ายน้ำ">สระว่ายน้ำ</option>
-                                <option value="ห้องฟิตเนส">ห้องฟิตเนส</option>
-                                <option value="ห้องประชุม">ห้องประชุม</option>
-                                <option value="สนามเด็กเล่น">สนามเด็กเล่น</option>
-                            </select>
+                    <form id="bookingForm" style="padding: 20px 30px;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="bookingLocation">เลือกสถานที่</label>
+                                <select class="form-control" id="bookingLocation" required>
+                                    <option value="">เลือกสถานที่</option>
+                                    <option value="สนามกีฬา">สนามกีฬา</option>
+                                    <option value="สระว่ายน้ำ">สระว่ายน้ำ</option>
+                                    <option value="คลับเฮ้าส์">คลับเฮ้าส์</option>
+                                    <option value="ห้องประชุม">ห้องประชุม</option>
+                                    <option value="สนามเด็กเล่น">สนามเด็กเล่น</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="bookingDate">วันที่</label>
+                                <input type="date" class="form-control" id="bookingDate" required>
+                            </div>
                         </div>
                         <div class="form-row">
                             <div class="form-group">
-                                <label for="bookingDate">วันที่ต้องการจอง</label>
-                                <input type="date" class="form-control" id="bookingDate" required>
+                                <label for="bookingTimeStart">เวลาเริ่ม</label>
+                                <input type="time" class="form-control" id="bookingTimeStart" required>
                             </div>
                             <div class="form-group">
-                                <label for="bookingTime">ช่วงเวลา</label>
-                                <select class="form-control" id="bookingTime" required>
-                                    <option value="">เลือกช่วงเวลา</option>
-                                    <option value="09:00-12:00">09:00 - 12:00 น.</option>
-                                    <option value="13:00-16:00">13:00 - 16:00 น.</option>
-                                    <option value="17:00-20:00">17:00 - 20:00 น.</option>
-                                </select>
+                                <label for="bookingTimeEnd">เวลาสิ้นสุด</label>
+                                <input type="time" class="form-control" id="bookingTimeEnd" required>
                             </div>
                         </div>
                         <div class="form-group">
-                            <label for="bookingPurpose">วัตถุประสงค์การใช้งาน</label>
-                            <textarea class="form-control" id="bookingPurpose" rows="3"></textarea>
+                            <label for="bookingPurpose">วัตถุประสงค์</label>
+                            <textarea class="form-control" id="bookingPurpose" rows="3" required></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="attendeeCount">จำนวนผู้เข้าร่วม</label>
+                            <input type="number" class="form-control" id="attendeeCount" min="1" required>
                         </div>
                         <button type="submit" class="btn btn-primary">ส่งคำขอจอง</button>
                     </form>
@@ -516,34 +2338,33 @@
 
                 <div class="card mt-20">
                     <div class="card-header">
-                        <h3 class="card-title">สถานะการจองของคุณ</h3>
+                        <h3 class="card-title">การจองของคุณ</h3>
                     </div>
                     <div class="table-container">
                         <table class="table">
                             <thead>
                                 <tr>
-                                    <th>รหัสจอง</th>
-                                    <th>พื้นที่</th>
+                                    <th>สถานที่</th>
                                     <th>วันที่</th>
                                     <th>เวลา</th>
                                     <th>สถานะ</th>
+                                    <th>การดำเนินการ</th>
                                 </tr>
                             </thead>
-                            <tbody id="bookingStatusTable">
-                                <!-- Example rows, will be populated by JS -->
+                            <tbody id="bookingTable">
                                 <tr>
-                                    <td>#B001</td>
-                                    <td>ห้องประชุม</td>
-                                    <td>2023-11-10</td>
-                                    <td>09:00-12:00</td>
-                                    <td><span class="status-badge status-pending">รออนุมัติ</span></td>
+                                    <td>สนามกีฬา</td>
+                                    <td>2023-11-05</td>
+                                    <td>14:00-16:00</td>
+                                    <td><span class="status-badge status-approved">อนุมัติ</span></td>
+                                    <td><button class="btn btn-secondary btn-sm">ยกเลิก</button></td>
                                 </tr>
                                 <tr>
-                                    <td>#B002</td>
-                                    <td>สระว่ายน้ำ</td>
-                                    <td>2023-11-05</td>
-                                    <td>13:00-16:00</td>
-                                    <td><span class="status-badge status-approved">อนุมัติแล้ว</span></td>
+                                    <td>คลับเฮ้าส์</td>
+                                    <td>2023-11-12</td>
+                                    <td>18:00-22:00</td>
+                                    <td><span class="status-badge status-pending">รอการอนุมัติ</span></td>
+                                    <td><button class="btn btn-secondary btn-sm">แก้ไข</button></td>
                                 </tr>
                             </tbody>
                         </table>
@@ -551,63 +2372,46 @@
                 </div>
             </div>
 
-            <!-- Manage Users Page (Admin Only) -->
             <div id="manage-users" class="page-content hidden">
                 <div class="page-title">
                     <h2>จัดการผู้ใช้</h2>
-                    <p>จัดการข้อมูลผู้ใช้งานในระบบ</p>
+                    <p>จัดการข้อมูลผู้อยู่อาศัยและสิทธิ์การใช้งาน</p>
                 </div>
 
                 <div class="card">
                     <div class="card-header">
-                        <h3 class="card-title">รายชื่อผู้ใช้งาน</h3>
+                        <h3 class="card-title">รายชื่อผู้ใช้ทั้งหมด</h3>
                     </div>
                     <div class="table-container">
                         <table class="table">
                             <thead>
                                 <tr>
-                                    <th>ชื่อผู้ใช้</th>
                                     <th>ชื่อ-นามสกุล</th>
-                                    <th>บ้านเลขที่</th>
+                                    <th>ที่อยู่</th>
                                     <th>เบอร์ติดต่อ</th>
-                                    <th>บทบาท</th>
                                     <th>สถานะ</th>
+                                    <th>บทบาท</th>
                                     <th>การดำเนินการ</th>
                                 </tr>
                             </thead>
-                            <tbody id="userListTable">
-                                <!-- Example rows, will be populated by JS -->
+                            <tbody>
                                 <tr>
-                                    <td>admin</td>
-                                    <td>ผู้ดูแลระบบ</td>
-                                    <td>-</td>
-                                    <td>-</td>
-                                    <td>Admin</td>
-                                    <td><span class="status-badge status-approved">ใช้งาน</span></td>
+                                    <td>นายสมชาย ใจดี</td>
+                                    <td>A-101</td>
+                                    <td>081-234-5678</td>
+                                    <td><span class="status-badge status-approved">อนุมัติ</span></td>
+                                    <td>ผู้อยู่อาศัย</td>
                                     <td>
                                         <button class="btn btn-secondary btn-sm">แก้ไข</button>
-                                        <button class="btn btn-primary btn-sm">รีเซ็ตรหัส</button>
+                                        <button class="btn btn-secondary btn-sm">ระงับ</button>
                                     </td>
                                 </tr>
                                 <tr>
-                                    <td>resident01</td>
-                                    <td>คุณสมชาย ใจดี</td>
-                                    <td>123/45</td>
-                                    <td>0812345678</td>
-                                    <td>Resident</td>
-                                    <td><span class="status-badge status-approved">ใช้งาน</span></td>
-                                    <td>
-                                        <button class="btn btn-secondary btn-sm">แก้ไข</button>
-                                        <button class="btn btn-primary btn-sm">รีเซ็ตรหัส</button>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td>newuser</td>
-                                    <td>คุณมาลี สวยใส</td>
-                                    <td>123/46</td>
-                                    <td>0898765432</td>
-                                    <td>Resident</td>
-                                    <td><span class="status-badge status-pending">รออนุมัติ</span></td>
+                                    <td>นางมาลี สวยใส</td>
+                                    <td>B-205</td>
+                                    <td>089-876-5432</td>
+                                    <td><span class="status-badge status-pending">รอการอนุมัติ</span></td>
+                                    <td>ผู้อยู่อาศัย</td>
                                     <td>
                                         <button class="btn btn-primary btn-sm">อนุมัติ</button>
                                         <button class="btn btn-secondary btn-sm">ปฏิเสธ</button>
@@ -619,11 +2423,10 @@
                 </div>
             </div>
 
-            <!-- Manage Repairs Page (Admin Only) -->
             <div id="manage-repairs" class="page-content hidden">
                 <div class="page-title">
                     <h2>จัดการแจ้งซ่อม</h2>
-                    <p>ตรวจสอบและจัดการงานแจ้งซ่อมทั้งหมด</p>
+                    <p>ติดตามและจัดการคำขอแจ้งซ่อมทั้งหมด</p>
                 </div>
 
                 <div class="card">
@@ -635,21 +2438,20 @@
                             <thead>
                                 <tr>
                                     <th>รหัส</th>
-                                    <th>หัวข้อ</th>
                                     <th>ผู้แจ้ง</th>
-                                    <th>บ้านเลขที่</th>
+                                    <th>หัวข้อ</th>
+                                    <th>หมวดหมู่</th>
                                     <th>วันที่แจ้ง</th>
                                     <th>สถานะ</th>
                                     <th>การดำเนินการ</th>
                                 </tr>
                             </thead>
-                            <tbody id="allRepairsTable">
-                                <!-- Example rows, will be populated by JS -->
+                            <tbody>
                                 <tr>
                                     <td>#001</td>
+                                    <td>นายสมชาย ใจดี</td>
                                     <td>ไฟทางเดินเสีย</td>
-                                    <td>คุณสมชาย ใจดี</td>
-                                    <td>123/45</td>
+                                    <td>ไฟฟ้า</td>
                                     <td>2023-10-26</td>
                                     <td><span class="status-badge status-pending">รอรับเรื่อง</span></td>
                                     <td>
@@ -659,9 +2461,9 @@
                                 </tr>
                                 <tr>
                                     <td>#002</td>
+                                    <td>นางมาลี สวยใส</td>
                                     <td>น้ำรั่วซึม</td>
-                                    <td>คุณมาลี สวยใส</td>
-                                    <td>123/46</td>
+                                    <td>น้ำประปา</td>
                                     <td>2023-10-20</td>
                                     <td><span class="status-badge status-progress">กำลังดำเนินการ</span></td>
                                     <td>
@@ -675,84 +2477,161 @@
                 </div>
             </div>
 
-            <!-- Reports Page (Admin Only) -->
             <div id="reports" class="page-content hidden">
                 <div class="page-title">
                     <h2>รายงาน</h2>
-                    <p>รายงานสรุปข้อมูลต่างๆ ของหมู่บ้าน</p>
+                    <p>สรุปและวิเคราะห์ข้อมูลการจัดการหมู่บ้าน</p>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon blue">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3>95%</h3>
+                            <p>อัตราการชำระเงิน</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3>2.5 วัน</h3>
+                            <p>เวลาเฉลี่ยแก้ไขปัญหา</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon orange">
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3>4.8/5</h3>
+                            <p>คะแนนความพึงพอใจ</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon red">
+                            <i class="fas fa-calendar-check"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3>85%</h3>
+                            <p>อัตราการใช้สิ่งอำนวยความสะดวก</p>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="card">
                     <div class="card-header">
-                        <h3 class="card-title">รายงานภาพรวม</h3>
+                        <h3 class="card-title">สรุปรายเดือน</h3>
                     </div>
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="reportType">ประเภทรายงาน</label>
-                            <select class="form-control" id="reportType">
-                                <option value="repair">รายงานแจ้งซ่อม</option>
-                                <option value="payment">รายงานการชำระเงิน</option>
-                                <option value="user">รายงานผู้ใช้งาน</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="reportPeriod">ช่วงเวลา</label>
-                            <select class="form-control" id="reportPeriod">
-                                <option value="monthly">รายเดือน</option>
-                                <option value="quarterly">รายไตรมาส</option>
-                                <option value="yearly">รายปี</option>
-                            </select>
-                        </div>
-                    </div>
-                    <button class="btn btn-primary">สร้างรายงาน</button>
-                    <div class="mt-20" id="reportOutput">
-                        <!-- Report content will be displayed here -->
-                        <p>เลือกประเภทรายงานและช่วงเวลาเพื่อสร้างรายงาน</p>
+                    <div style="padding: 20px 30px;">
+                        <canvas id="monthlyChart" width="400" height="200"></canvas>
                     </div>
                 </div>
             </div>
-
         </div>
     </div>
 
-    <!-- Payment Modal -->
+    <!-- Modal for adding/editing announcements -->
+    <div id="announcementModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="announcementModalTitle">เพิ่มประกาศใหม่</h3>
+                <button class="modal-close" onclick="closeModal('announcementModal')">&times;</button>
+            </div>
+            <form id="announcementForm">
+                <input type="hidden" id="announcementId">
+                <div class="form-group">
+                    <label for="announcementTitle">หัวข้อประกาศ</label>
+                    <input type="text" class="form-control" id="announcementTitle" required>
+                </div>
+                <div class="form-group">
+                    <label for="announcementContent">รายละเอียด</label>
+                    <textarea class="form-control" id="announcementContent" rows="5" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="announcementDate">วันที่ประกาศ</label>
+                    <input type="date" class="form-control" id="announcementDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="announcementAuthor">ผู้ประกาศ</label>
+                    <input type="text" class="form-control" id="announcementAuthor" required>
+                </div>
+                <div class="form-group">
+                    <label for="announcementTag">แท็ก (เช่น สำคัญ, กิจกรรม, แจ้งเตือน)</label>
+                    <input type="text" class="form-control" id="announcementTag">
+                </div>
+                <button type="submit" class="btn btn-primary">บันทึกประกาศ</button>
+            </form>
+        </div>
+    </div>
+
     <div id="paymentModal" class="modal">
         <div class="modal-content">
             <div class="modal-header">
                 <h3 class="modal-title">ชำระเงิน</h3>
-                <button class="modal-close" onclick="closePaymentModal()">&times;</button>
+                <button class="modal-close" onclick="closeModal('paymentModal')">&times;</button>
             </div>
             <form id="paymentForm">
-                <div class="form-group">
-                    <label for="paymentBillId">รหัสบิล</label>
-                    <input type="text" class="form-control" id="paymentBillId" readonly>
-                </div>
-                <div class="form-group">
-                    <label for="paymentItem">รายการ</label>
-                    <input type="text" class="form-control" id="paymentItem" readonly>
-                </div>
                 <div class="form-group">
                     <label for="paymentAmount">จำนวนเงิน</label>
                     <input type="text" class="form-control" id="paymentAmount" readonly>
                 </div>
                 <div class="form-group">
-                    <label for="paymentMethod">ช่องทางการชำระเงิน</label>
-                    <select class="form-control" id="paymentMethod" required>
-                        <option value="">เลือกช่องทาง</option>
-                        <option value="bank_transfer">โอนเงินผ่านธนาคาร</option>
-                        <option value="credit_card">บัตรเครดิต</option>
-                        <option value="promptpay">พร้อมเพย์</option>
+                    <label for="paymentMethod">วิธีการชำระ</label>
+                    <select class="form-control" id="paymentMethod" required onchange="showQRCode()">
+                     <option value="">เลือกวิธีการชำระ</option>
+                     <option value="bank_transfer">โอนเงินผ่านธนาคาร</option>
+                     <option value="credit_card">บัตรเครดิต</option>
+                     <option value="promptpay">พร้อมเพย์</option>
                     </select>
                 </div>
-                <div class="form-group">
-                    <label for="paymentRef">หลักฐานการชำระเงิน (เลขที่อ้างอิง/สลิป)</label>
-                    <input type="text" class="form-control" id="paymentRef" required>
+                <div id="qrCodeContainer" style="display:none; margin-top: 20px;">
+                    <h4>สแกน QR Code เพื่อชำระเงิน</h4>
+                    <img src="QR_PAYMENT.jpg" alt="PromptPay QR Code" style="max-width: 300px;">
                 </div>
-                <button type="submit" class="btn btn-primary">ยืนยันการชำระเงิน</button>
+                <div id="bankDetails" class="form-group hidden">
+                    <label>ข้อมูลบัญชีธนาคาร</label>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                        <p><strong>ธนาคารกสิกรไทย</strong></p>
+                        <p>SMART VILLAGE</p>
+                        <p>เลขบัญชี: 139-1-56465-1</p>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="paymentSlip">หลักฐานการโอนเงิน</label>
+                    <div class="file-upload" onclick="document.getElementById('paymentSlipFile').click()">
+                        <i class="fas fa-receipt"></i>
+                        <p>อัปโหลดสลิป<br><small>รองรับ JPG, PNG</small></p>
+                        <input type="file" id="paymentSlipFile" style="display: none;" accept=".jpg,.png">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">ยืนยันการชำระ</button>
             </form>
         </div>
     </div>
 
+    <script>
+        function showQRCode() {
+            var paymentMethod = document.getElementById("paymentMethod").value;
+            var qrCodeContainer = document.getElementById("qrCodeContainer");
+            var bankDetails = document.getElementById("bankDetails");
+
+            if (paymentMethod === "promptpay") {
+                qrCodeContainer.style.display = "block";
+                bankDetails.style.display = "none";
+            } else if (paymentMethod === "bank_transfer") {
+                qrCodeContainer.style.display = "none";
+                bankDetails.style.display = "block";
+            } else {
+                qrCodeContainer.style.display = "none";
+                bankDetails.style.display = "none";
+            }
+        }
+    </script>
     <script src="script.js"></script>
 </body>
 </html>
+

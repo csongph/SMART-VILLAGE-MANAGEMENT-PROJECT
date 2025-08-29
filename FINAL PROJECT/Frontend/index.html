@@ -1,1075 +1,1521 @@
-# app.py
-from flask import Flask, request, jsonify, send_from_directory
-from flask_sqlalchemy import SQLAlchemy
-from flask_cors import CORS
-from flask_socketio import SocketIO, emit, join_room, leave_room
-from datetime import datetime, date, time
-import bcrypt
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
-class Config:
-    """
-    Configuration class for the Flask application.
-    Uses environment variables for sensitive data.
-    """
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'postgresql://your_username:your_password@localhost:5432/smart_village')
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'development_secret_key')
-    UPLOAD_FOLDER = 'uploads' # New: Folder for file uploads
-    MAX_CONTENT_LENGTH = 16 * 1024 * 1024 # 16 MB max upload size
-
-class SmartVillageApp:
-    """
-    Main application class for the Smart Village backend,
-    encapsulating Flask app, SQLAlchemy, and SocketIO.
-    """
-    def __init__(self):
-        self.app = Flask(__name__)
-        self.app.config.from_object(Config)
-        CORS(self.app, resources={r"/*": {"origins": "*"}})
-        self.db = SQLAlchemy(self.app)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode='threading')
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMART VILLAGE</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <!-- เพิ่ม Chart.js สำหรับหน้า Reports -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- เพิ่ม Socket.IO client library สำหรับ Real-time communication -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        /* เพิ่มสไตล์สำหรับกระดิ่งแจ้งเตือน */
+        .notification-bell {
+            position: relative;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            transition: background-color 0.3s;
+        }
         
-        # Ensure upload folder exists
-        if not os.path.exists(self.app.config['UPLOAD_FOLDER']):
-            os.makedirs(self.app.config['UPLOAD_FOLDER'])
-
-        self._setup_models()
-        self._setup_routes()
-        self._setup_socketio_events()
-
-    def _setup_models(self):
-        """
-        Defines the SQLAlchemy database models.
-        """
-        class Users(self.db.Model):
-            __tablename__ = 'users'
-            user_id = self.db.Column(self.db.Integer, primary_key=True)
-            name = self.db.Column(self.db.String(255), nullable=False)
-            username = self.db.Column(self.db.String(50), unique=True, nullable=False)
-            password_hash = self.db.Column(self.db.String(255), nullable=False)
-            role = self.db.Column(self.db.String(20), nullable=False, default='resident')
-            phone = self.db.Column(self.db.String(20))
-            address = self.db.Column(self.db.Text)
-            email = self.db.Column(self.db.String(255))
-            avatar = self.db.Column(self.db.String(255))
-            status = self.db.Column(self.db.String(50), default='pending') # New: User status
-
-            def set_password(self, password):
-                self.password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-
-            def check_password(self, password):
-                return bcrypt.checkpw(password.encode('utf-8'), self.password_hash.encode('utf-8'))
-
-        class Announcements(self.db.Model):
-            __tablename__ = 'announcements'
-            announcement_id = self.db.Column(self.db.Integer, primary_key=True)
-            title = self.db.Column(self.db.String(255), nullable=False)
-            content = self.db.Column(self.db.Text, nullable=False)
-            published_date = self.db.Column(self.db.DateTime, default=datetime.utcnow)
-            author_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-            tag = self.db.Column(self.db.String(50))
-            tag_color = self.db.Column(self.db.String(20))
-            tag_bg = self.db.Column(self.db.String(20))
-            # Relationship to get author name
-            author = self.db.relationship('Users', backref='announcements_authored', lazy=True)
-
-        class RepairRequests(self.db.Model):
-            __tablename__ = 'repair_requests'
-            request_id = self.db.Column(self.db.Integer, primary_key=True)
-            user_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-            title = self.db.Column(self.db.String(255), nullable=False)
-            category = self.db.Column(self.db.String(50))
-            description = self.db.Column(self.db.Text, nullable=False)
-            submitted_date = self.db.Column(self.db.DateTime, default=datetime.utcnow)
-            status = self.db.Column(self.db.String(50), default='pending')
-            image_paths = self.db.Column(self.db.Text) # Stored as JSON string or comma-separated
-            # Relationship to get user name
-            user = self.db.relationship('Users', backref='repair_requests', lazy=True)
-
-        class BookingRequests(self.db.Model):
-            __tablename__ = 'booking_requests'
-            booking_id = self.db.Column(self.db.Integer, primary_key=True)
-            user_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-            location = self.db.Column(self.db.String(255), nullable=False)
-            date = self.db.Column(self.db.Date)
-            start_time = self.db.Column(self.db.Time)
-            end_time = self.db.Column(self.db.Time)
-            purpose = self.db.Column(self.db.Text)
-            attendee_count = self.db.Column(self.db.Integer)
-            status = self.db.Column(self.db.String(50), default='pending')
-            # Relationship to get user name
-            user = self.db.relationship('Users', backref='booking_requests', lazy=True)
-
-        class Bills(self.db.Model): # New: Bills Model
-            __tablename__ = 'bills'
-            bill_id = self.db.Column(self.db.Integer, primary_key=True)
-            item_name = self.db.Column(self.db.String(255), nullable=False)
-            amount = self.db.Column(self.db.Numeric(10, 2), nullable=False)
-            due_date = self.db.Column(self.db.Date)
-            recipient_id = self.db.Column(self.db.String(50), nullable=False) # 'all' or user_id
-            issued_by_user_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-            status = self.db.Column(self.db.String(50), default='unpaid') # unpaid, paid, pending_verification
-            issued_by = self.db.relationship('Users', backref='bills_issued', lazy=True)
-
-        class Payments(self.db.Model):
-            __tablename__ = 'payments'
-            payment_id = self.db.Column(self.db.Integer, primary_key=True)
-            user_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-            bill_id = self.db.Column(self.db.Integer, self.db.ForeignKey('bills.bill_id'), nullable=True) # New: Link to Bills
-            amount = self.db.Column(self.db.Numeric(10, 2), nullable=False)
-            payment_method = self.db.Column(self.db.String(50))
-            payment_date = self.db.Column(self.db.DateTime, default=datetime.utcnow)
-            status = self.db.Column(self.db.String(50)) # pending, paid, rejected
-            slip_path = self.db.Column(self.db.String(255))
-            # Relationships
-            user = self.db.relationship('Users', backref='payments', lazy=True)
-            bill = self.db.relationship('Bills', backref='payments', lazy=True)
-
-
-        class CalendarEvents(self.db.Model):
-            __tablename__ = 'calendar_events'
-            event_id = self.db.Column(self.db.Integer, primary_key=True)
-            event_name = self.db.Column(self.db.String(255), nullable=False)
-            event_date = self.db.Column(self.db.DateTime)
-            location = self.db.Column(self.db.String(255))
-            description = self.db.Column(self.db.Text)
-
-        class Documents(self.db.Model):
-            __tablename__ = 'documents'
-            document_id = self.db.Column(self.db.Integer, primary_key=True)
-            document_name = self.db.Column(self.db.String(255), nullable=False)
-            file_path = self.db.Column(self.db.String(255), nullable=False)
-            uploaded_by_user_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-            upload_date = self.db.Column(self.db.DateTime, default=datetime.utcnow)
-            category = self.db.Column(self.db.String(50)) # New: Document category
-            uploaded_by = self.db.relationship('Users', backref='documents_uploaded', lazy=True)
-
-        class ChatMessages(self.db.Model):
-            __tablename__ = 'chat_messages'
-            message_id = self.db.Column(self.db.Integer, primary_key=True)
-            sender_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-            receiver_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'), nullable=True)
-            content = self.db.Column(self.db.Text, nullable=False)
-            timestamp = self.db.Column(self.db.DateTime, default=datetime.utcnow)
-            room_name = self.db.Column(self.db.String(100), default='general')
-            sender = self.db.relationship('Users', foreign_keys=[sender_id], backref='sent_messages', lazy=True)
-            receiver = self.db.relationship('Users', foreign_keys=[receiver_id], backref='received_messages', lazy=True)
-
-
-        class SecurityVisitors(self.db.Model):
-            __tablename__ = 'security_visitors'
-            visitor_id = self.db.Column(self.db.Integer, primary_key=True)
-            user_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-            name = self.db.Column(self.db.String(255), nullable=False)
-            phone = self.db.Column(self.db.String(20))
-            visit_date = self.db.Column(self.db.Date)
-            visit_time = self.db.Column(self.db.Time)
-            purpose = self.db.Column(self.db.Text)
-            user = self.db.relationship('Users', backref='visitors_registered', lazy=True)
-
-        class SecurityIncidents(self.db.Model):
-            __tablename__ = 'security_incidents'
-            incident_id = self.db.Column(self.db.Integer, primary_key=True)
-            user_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-            description = self.db.Column(self.db.Text, nullable=False)
-            reported_date = self.db.Column(self.db.DateTime, default=datetime.utcnow)
-            evidence_paths = self.db.Column(self.db.Text)
-            user = self.db.relationship('Users', backref='incidents_reported', lazy=True)
-
-        class VotingPolls(self.db.Model):
-            __tablename__ = 'voting_polls'
-            poll_id = self.db.Column(self.db.Integer, primary_key=True)
-            title = self.db.Column(self.db.String(255), nullable=False)
-            description = self.db.Column(self.db.Text)
-            start_date = self.db.Column(self.db.Date)
-            end_date = self.db.Column(self.db.Date)
-
-        class VotingOptions(self.db.Model):
-            __tablename__ = 'voting_options'
-            option_id = self.db.Column(self.db.Integer, primary_key=True)
-            poll_id = self.db.Column(self.db.Integer, self.db.ForeignKey('voting_polls.poll_id'))
-            option_text = self.db.Column(self.db.String(255), nullable=False)
-
-        class VotingResults(self.db.Model):
-            __tablename__ = 'voting_results'
-            result_id = self.db.Column(self.db.Integer, primary_key=True)
-            poll_id = self.db.Column(self.db.Integer, self.db.ForeignKey('voting_polls.poll_id'))
-            option_id = self.db.Column(self.db.Integer, self.db.ForeignKey('voting_options.option_id'))
-            user_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-
-        # Expose models as attributes of the class instance
-        self.Users = Users
-        self.Announcements = Announcements
-        self.RepairRequests = RepairRequests
-        self.BookingRequests = BookingRequests
-        self.Bills = Bills # New
-        self.Payments = Payments
-        self.CalendarEvents = CalendarEvents
-        self.Documents = Documents
-        self.ChatMessages = ChatMessages
-        self.SecurityVisitors = SecurityVisitors
-        self.SecurityIncidents = SecurityIncidents
-        self.VotingPolls = VotingPolls
-        self.VotingOptions = VotingOptions
-        self.VotingResults = VotingResults
-
-    def _setup_routes(self):
-        """
-        Defines the RESTful API routes for the Flask application.
-        """
-        # Serve uploaded files
-        @self.app.route('/uploads/<filename>')
-        def uploaded_file(filename):
-            return send_from_directory(self.app.config['UPLOAD_FOLDER'], filename)
-
-        @self.app.route('/users', methods=['GET', 'POST'])
-        def handle_users():
-            if request.method == 'POST':
-                data = request.json
-                if self.Users.query.filter_by(username=data['username']).first():
-                    return jsonify({"message": "Username already exists"}), 409
-                    
-                new_user = self.Users(
-                    name=data['name'],
-                    username=data['username'],
-                    role=data.get('role', 'resident'),
-                    phone=data.get('phone'),
-                    address=data.get('address'),
-                    email=data.get('email'),
-                    avatar=data.get('avatar', data['name'][0].upper()), # Default avatar from first letter of name
-                    status=data.get('status', 'pending') # New: Set status
-                )
-                new_user.set_password(data['password'])
-                self.db.session.add(new_user)
-                self.db.session.commit()
-                return jsonify({"message": "User registered successfully", "user_id": new_user.user_id}), 201
-            
-            elif request.method == 'GET':
-                users = self.Users.query.all()
-                result = [
-                    {
-                        "user_id": user.user_id,
-                        "name": user.name,
-                        "username": user.username,
-                        "role": user.role,
-                        "phone": user.phone,
-                        "address": user.address,
-                        "email": user.email,
-                        "avatar": user.avatar,
-                        "status": user.status # New: Include status
-                    } for user in users
-                ]
-                return jsonify(result)
-
-        @self.app.route('/users/<int:user_id>', methods=['GET', 'PUT', 'DELETE'])
-        def handle_single_user(user_id):
-            user = self.Users.query.get_or_404(user_id)
-            if request.method == 'GET':
-                return jsonify({
-                    "user_id": user.user_id,
-                    "name": user.name,
-                    "username": user.username,
-                    "role": user.role,
-                    "phone": user.phone,
-                    "address": user.address,
-                    "email": user.email,
-                    "avatar": user.avatar,
-                    "status": user.status # New: Include status
-                })
-            elif request.method == 'PUT':
-                data = request.json
-                user.name = data.get('name', user.name)
-                user.username = data.get('username', user.username)
-                user.role = data.get('role', user.role)
-                user.phone = data.get('phone', user.phone)
-                user.address = data.get('address', user.address)
-                user.email = data.get('email', user.email)
-                user.avatar = data.get('avatar', user.avatar)
-                user.status = data.get('status', user.status) # New: Update status
-                
-                if 'password' in data and data['password']:
-                    user.set_password(data['password'])
-                self.db.session.commit()
-                return jsonify({"message": "User updated successfully"}), 200
-            elif request.method == 'DELETE':
-                self.db.session.delete(user)
-                self.db.session.commit()
-                return jsonify({"message": "User deleted successfully"}), 204
-
-        @self.app.route('/login', methods=['POST'])
-        def login():
-            data = request.json
-            username = data.get('username')
-            password = data.get('password')
-
-            user = self.Users.query.filter_by(username=username).first()
-            if user and user.check_password(password):
-                if user.status == 'pending':
-                    return jsonify({"message": "บัญชีของคุณยังไม่ได้รับการอนุมัติ"}), 403
-                if user.status == 'suspended':
-                    return jsonify({"message": "บัญชีของคุณถูกระงับ"}), 403
-                return jsonify({
-                    "message": "Login successful", 
-                    "user_id": user.user_id, 
-                    "username": user.username,
-                    "name": user.name,
-                    "role": user.role,
-                    "avatar": user.avatar if user.avatar else user.name[0].upper()
-                }), 200
-            return jsonify({"message": "Invalid username or password"}), 401
-
-        @self.app.route('/announcements', methods=['GET', 'POST'])
-        def manage_announcements():
-            if request.method == 'POST':
-                data = request.json
-                tag_colors = {
-                    'สำคัญ': {'color': '#1976d2', 'bg': '#e3f2fd'},
-                    'กิจกรรม': {'color': '#2e7d32', 'bg': '#e8f5e8'},
-                    'แจ้งเตือน': {'color': '#856404', 'bg': '#fff3cd'}
-                }
-                tag_info = tag_colors.get(data.get('tag'), {'color': '#666', 'bg': '#eee'})
-
-                new_announcement = self.Announcements(
-                    title=data['title'],
-                    content=data['content'],
-                    published_date=datetime.fromisoformat(data['published_date']) if 'published_date' in data else datetime.utcnow(),
-                    author_id=data.get('author_id'),
-                    tag=data.get('tag'),
-                    tag_color=tag_info['color'],
-                    tag_bg=tag_info['bg']
-                )
-                self.db.session.add(new_announcement)
-                self.db.session.commit()
-                
-                author_name = new_announcement.author.name if new_announcement.author else 'Unknown Author'
-                self.socketio.emit('new_announcement', {
-                    'announcement_id': new_announcement.announcement_id,
-                    'title': new_announcement.title,
-                    'content': new_announcement.content,
-                    'published_date': new_announcement.published_date.isoformat(),
-                    'author_id': new_announcement.author_id,
-                    'author_name': author_name, # New: Include author name
-                    'tag': new_announcement.tag,
-                    'tag_color': new_announcement.tag_color,
-                    'tag_bg': new_announcement.tag_bg
-                }, broadcast=True)
-
-                return jsonify({"message": "Announcement created successfully", "announcement_id": new_announcement.announcement_id}), 201
-            
-            elif request.method == 'GET':
-                announcements = self.Announcements.query.order_by(self.Announcements.published_date.desc()).all()
-                result = [
-                    {
-                        "announcement_id": ann.announcement_id,
-                        "title": ann.title,
-                        "content": ann.content,
-                        "published_date": ann.published_date.isoformat(),
-                        "author_id": ann.author_id,
-                        "author_name": ann.author.name if ann.author else 'Unknown Author', # New: Include author name
-                        "tag": ann.tag,
-                        "tag_color": ann.tag_color,
-                        "tag_bg": ann.tag_bg
-                    } for ann in announcements
-                ]
-                return jsonify(result)
-
-        @self.app.route('/announcements/<int:announcement_id>', methods=['PUT', 'DELETE'])
-        def handle_single_announcement(announcement_id):
-            announcement = self.Announcements.query.get_or_404(announcement_id)
-            if request.method == 'PUT':
-                data = request.json
-                announcement.title = data.get('title', announcement.title)
-                announcement.content = data.get('content', announcement.content)
-                if 'published_date' in data:
-                    announcement.published_date = datetime.fromisoformat(data['published_date'])
-                announcement.author_id = data.get('author_id', announcement.author_id)
-                announcement.tag = data.get('tag', announcement.tag)
-                
-                tag_colors = {
-                    'สำคัญ': {'color': '#1976d2', 'bg': '#e3f2fd'},
-                    'กิจกรรม': {'color': '#2e7d32', 'bg': '#e8f5e8'},
-                    'แจ้งเตือน': {'color': '#856404', 'bg': '#fff3cd'}
-                }
-                tag_info = tag_colors.get(announcement.tag, {'color': '#666', 'bg': '#eee'})
-                announcement.tag_color = tag_info['color']
-                announcement.tag_bg = tag_info['bg']
-
-                self.db.session.commit()
-                author_name = announcement.author.name if announcement.author else 'Unknown Author'
-                self.socketio.emit('announcement_updated', {
-                    'announcement_id': announcement.announcement_id,
-                    'title': announcement.title,
-                    'content': announcement.content,
-                    'published_date': announcement.published_date.isoformat(),
-                    'author_id': announcement.author_id,
-                    'author_name': author_name, # New: Include author name
-                    'tag': announcement.tag,
-                    'tag_color': announcement.tag_color,
-                    'tag_bg': announcement.tag_bg
-                }, broadcast=True)
-                return jsonify({"message": "Announcement updated successfully"}), 200
-            
-            elif request.method == 'DELETE':
-                self.db.session.delete(announcement)
-                self.db.session.commit()
-                self.socketio.emit('announcement_deleted', {'announcement_id': announcement_id}, broadcast=True)
-                return jsonify({"message": "Announcement deleted successfully"}), 204
-
-        @self.app.route('/repair-requests', methods=['GET', 'POST'])
-        def manage_repair_requests():
-            if request.method == 'POST':
-                data = request.json
-                new_request = self.RepairRequests(
-                    user_id=data['user_id'],
-                    title=data['title'],
-                    category=data['category'],
-                    description=data['description'],
-                    status='pending',
-                    image_paths=data.get('image_paths')
-                )
-                self.db.session.add(new_request)
-                self.db.session.commit()
-                
-                user_name = new_request.user.name if new_request.user else 'Unknown User'
-                self.socketio.emit('new_repair_request', {
-                    'request_id': new_request.request_id,
-                    'user_id': new_request.user_id,
-                    'user_name': user_name, # New: Include user name
-                    'title': new_request.title,
-                    'status': new_request.status,
-                    'submitted_date': new_request.submitted_date.isoformat()
-                }, room='admins')
-                return jsonify({"message": "Repair request submitted successfully", "request_id": new_request.request_id}), 201
-            
-            elif request.method == 'GET':
-                requests = self.RepairRequests.query.all()
-                result = []
-                for req in requests:
-                    user = req.user # Use relationship
-                    result.append({
-                        "request_id": req.request_id,
-                        "user_id": req.user_id,
-                        "user_name": user.name if user else "Unknown User",
-                        "title": req.title,
-                        "category": req.category,
-                        "description": req.description,
-                        "status": req.status,
-                        "submitted_date": req.submitted_date.isoformat(),
-                        "image_paths": req.image_paths
-                    })
-                return jsonify(result)
-
-        @self.app.route('/repair-requests/<int:request_id>', methods=['PUT', 'DELETE'])
-        def handle_single_repair_request(request_id):
-            req = self.RepairRequests.query.get_or_404(request_id)
-            if request.method == 'PUT':
-                data = request.json
-                req.title = data.get('title', req.title)
-                req.category = data.get('category', req.category)
-                req.description = data.get('description', req.description)
-                req.status = data.get('status', req.status)
-                req.image_paths = data.get('image_paths', req.image_paths)
-                self.db.session.commit()
-                
-                self.socketio.emit('repair_status_updated', {
-                    'request_id': req.request_id,
-                    'user_id': req.user_id,
-                    'status': req.status,
-                    'title': req.title
-                }, room=f'user_{req.user_id}') # Emit to specific user room
-                
-                return jsonify({"message": "Repair request updated successfully"}), 200
-            elif request.method == 'DELETE':
-                self.db.session.delete(req)
-                self.db.session.commit()
-                return jsonify({"message": "Repair request deleted successfully"}), 204
-
-        @self.app.route('/booking-requests', methods=['GET', 'POST'])
-        def manage_booking_requests():
-            if request.method == 'POST':
-                data = request.json
-                new_booking = self.BookingRequests(
-                    user_id=data['user_id'],
-                    location=data['location'],
-                    date=datetime.fromisoformat(data['date']).date(),
-                    start_time=datetime.fromisoformat(data['start_time']).time(),
-                    end_time=datetime.fromisoformat(data['end_time']).time(),
-                    purpose=data.get('purpose'),
-                    attendee_count=data.get('attendee_count'),
-                    status='pending'
-                )
-                self.db.session.add(new_booking)
-                self.db.session.commit()
-                
-                user_name = new_booking.user.name if new_booking.user else 'Unknown User'
-                self.socketio.emit('new_booking_request', {
-                    'booking_id': new_booking.booking_id,
-                    'user_id': new_booking.user_id,
-                    'user_name': user_name, # New: Include user name
-                    'location': new_booking.location,
-                    'status': new_booking.status
-                }, room='admins')
-                return jsonify({"message": "Booking request submitted successfully", "booking_id": new_booking.booking_id}), 201
-            
-            elif request.method == 'GET':
-                bookings = self.BookingRequests.query.all()
-                result = []
-                for booking in bookings:
-                    user = booking.user # Use relationship
-                    result.append({
-                        "booking_id": booking.booking_id,
-                        "user_id": booking.user_id,
-                        "user_name": user.name if user else "Unknown User",
-                        "location": booking.location,
-                        "date": booking.date.isoformat(),
-                        "start_time": booking.start_time.isoformat(),
-                        "end_time": booking.end_time.isoformat(),
-                        "purpose": booking.purpose,
-                        "attendee_count": booking.attendee_count,
-                        "status": booking.status
-                    })
-                return jsonify(result)
-
-        @self.app.route('/booking-requests/<int:booking_id>', methods=['PUT', 'DELETE'])
-        def handle_single_booking_request(booking_id):
-            booking = self.BookingRequests.query.get_or_404(booking_id)
-            if request.method == 'PUT':
-                data = request.json
-                booking.location = data.get('location', booking.location)
-                booking.date = datetime.fromisoformat(data['date']).date() if 'date' in data else booking.date
-                booking.start_time = datetime.fromisoformat(data['start_time']).time() if 'start_time' in data else booking.start_time
-                booking.end_time = datetime.fromisoformat(data['end_time']).time() if 'end_time' in data else booking.end_time
-                booking.purpose = data.get('purpose', booking.purpose)
-                booking.attendee_count = data.get('attendee_count', booking.attendee_count)
-                booking.status = data.get('status', booking.status)
-                self.db.session.commit()
-                
-                self.socketio.emit('booking_status_updated', {
-                    'booking_id': booking.booking_id,
-                    'user_id': booking.user_id,
-                    'status': booking.status,
-                    'location': booking.location
-                }, room=f'user_{booking.user_id}')
-                return jsonify({"message": "Booking request updated successfully"}), 200
-            elif request.method == 'DELETE':
-                self.db.session.delete(booking)
-                self.db.session.commit()
-                return jsonify({"message": "Booking request deleted successfully"}), 204
-
-        @self.app.route('/bills', methods=['GET', 'POST']) # New: Bills API
-        def manage_bills():
-            if request.method == 'POST':
-                data = request.json
-                new_bill = self.Bills(
-                    item_name=data['item_name'],
-                    amount=data['amount'],
-                    due_date=datetime.fromisoformat(data['due_date']).date(),
-                    recipient_id=data.get('recipient_id', 'all'),
-                    issued_by_user_id=data['issued_by_user_id'],
-                    status='unpaid'
-                )
-                self.db.session.add(new_bill)
-                self.db.session.commit()
-
-                # Emit SocketIO event for new bill
-                self.socketio.emit('new_bill_created', {
-                    'bill_id': new_bill.bill_id,
-                    'item_name': new_bill.item_name,
-                    'amount': str(new_bill.amount),
-                    'due_date': new_bill.due_date.isoformat(),
-                    'recipient_id': new_bill.recipient_id,
-                    'status': new_bill.status
-                }, broadcast=True) # Broadcast to all relevant users (admins, specific recipient)
-                return jsonify({"message": "Bill created successfully", "bill_id": new_bill.bill_id}), 201
-            
-            elif request.method == 'GET':
-                bills = self.Bills.query.all()
-                result = []
-                for bill in bills:
-                    issued_by_user = bill.issued_by
-                    result.append({
-                        "bill_id": bill.bill_id,
-                        "item_name": bill.item_name,
-                        "amount": str(bill.amount),
-                        "due_date": bill.due_date.isoformat(),
-                        "recipient_id": bill.recipient_id,
-                        "issued_by_user_id": bill.issued_by_user_id,
-                        "issued_by_user_name": issued_by_user.name if issued_by_user else "Unknown",
-                        "status": bill.status
-                    })
-                return jsonify(result)
-
-        @self.app.route('/bills/<int:bill_id>', methods=['PUT', 'DELETE']) # New: Bills API
-        def handle_single_bill(bill_id):
-            bill = self.Bills.query.get_or_404(bill_id)
-            if request.method == 'PUT':
-                data = request.json
-                bill.item_name = data.get('item_name', bill.item_name)
-                bill.amount = data.get('amount', bill.amount)
-                bill.due_date = datetime.fromisoformat(data['due_date']).date() if 'due_date' in data else bill.due_date
-                bill.recipient_id = data.get('recipient_id', bill.recipient_id)
-                bill.status = data.get('status', bill.status) # Allow status update, e.g., by admin
-                self.db.session.commit()
-
-                self.socketio.emit('bill_updated', {
-                    'bill_id': bill.bill_id,
-                    'item_name': bill.item_name,
-                    'amount': str(bill.amount),
-                    'status': bill.status
-                }, broadcast=True)
-                return jsonify({"message": "Bill updated successfully"}), 200
-            elif request.method == 'DELETE':
-                bill_name = bill.item_name # Store name before deleting
-                self.db.session.delete(bill)
-                self.db.session.commit()
-                self.socketio.emit('bill_deleted', {'bill_id': bill_id, 'item_name': bill_name}, broadcast=True)
-                return jsonify({"message": "Bill deleted successfully"}), 204
-
-        @self.app.route('/payments', methods=['GET', 'POST'])
-        def manage_payments():
-            if request.method == 'POST':
-                data = request.json
-                new_payment = self.Payments(
-                    user_id=data['user_id'],
-                    bill_id=data.get('bill_id'), # New: Link to bill
-                    amount=data['amount'],
-                    payment_method=data.get('payment_method'),
-                    status=data.get('status', 'pending'),
-                    slip_path=data.get('slip_path')
-                )
-                self.db.session.add(new_payment)
-                self.db.session.commit()
-
-                user_name = new_payment.user.name if new_payment.user else 'Unknown User'
-                self.socketio.emit('new_payment_receipt', {
-                    'payment_id': new_payment.payment_id,
-                    'user_id': new_payment.user_id,
-                    'user_name': user_name, # New: Include user name
-                    'amount': str(new_payment.amount),
-                    'status': new_payment.status,
-                    'bill_id': new_payment.bill_id # New: Include bill_id
-                }, room='admins')
-                return jsonify({"message": "Payment recorded successfully", "payment_id": new_payment.payment_id}), 201
-            
-            elif request.method == 'GET':
-                # Allow filtering by user_id
-                user_id = request.args.get('user_id')
-                if user_id:
-                    payments = self.Payments.query.filter_by(user_id=user_id).all()
-                else:
-                    payments = self.Payments.query.all()
-
-                result = []
-                for payment in payments:
-                    user = payment.user
-                    bill = payment.bill # New: Get bill info
-                    result.append({
-                        "payment_id": payment.payment_id,
-                        "user_id": payment.user_id,
-                        "user_name": user.name if user else "Unknown User",
-                        "bill_id": payment.bill_id, # New: Include bill_id
-                        "bill_item_name": bill.item_name if bill else None, # New: Include bill item name
-                        "amount": str(payment.amount),
-                        "payment_method": payment.payment_method,
-                        "payment_date": payment.payment_date.isoformat(),
-                        "status": payment.status,
-                        "slip_path": payment.slip_path
-                    })
-                return jsonify(result)
-
-        @self.app.route('/payments/approve/<int:payment_id>', methods=['PUT']) # New: Approve payment API
-        def approve_payment(payment_id):
-            payment = self.Payments.query.get_or_404(payment_id)
-            data = request.json
-            new_status = data.get('status', 'paid') # Default to 'paid'
-
-            if new_status not in ['paid', 'rejected']:
-                return jsonify({"message": "Invalid status for payment approval"}), 400
-
-            payment.status = new_status
-            if payment.bill: # If linked to a bill, update bill status
-                payment.bill.status = new_status
-            self.db.session.commit()
-
-            self.socketio.emit('payment_approved', {
-                'payment_id': payment.payment_id,
-                'user_id': payment.user_id,
-                'bill_id': payment.bill_id,
-                'status': payment.status
-            }, broadcast=True) # Broadcast to relevant users
-            return jsonify({"message": f"Payment {payment_id} status updated to {new_status}"}), 200
-
-        @self.app.route('/calendar-events', methods=['GET', 'POST'])
-        def manage_calendar_events():
-            if request.method == 'POST':
-                data = request.json
-                new_event = self.CalendarEvents(
-                    event_name=data['event_name'],
-                    event_date=datetime.fromisoformat(data['event_date']),
-                    location=data.get('location'),
-                    description=data.get('description')
-                )
-                self.db.session.add(new_event)
-                self.db.session.commit()
-                self.socketio.emit('new_calendar_event', {
-                    'event_id': new_event.event_id,
-                    'event_name': new_event.event_name,
-                    'event_date': new_event.event_date.isoformat(),
-                    'location': new_event.location
-                }, broadcast=True)
-                return jsonify({"message": "Calendar event created successfully", "event_id": new_event.event_id}), 201
-            
-            elif request.method == 'GET':
-                events = self.CalendarEvents.query.all()
-                result = [
-                    {
-                        "event_id": event.event_id,
-                        "event_name": event.event_name,
-                        "event_date": event.event_date.isoformat(),
-                        "location": event.location,
-                        "description": event.description
-                    } for event in events
-                ]
-                return jsonify(result)
-
-        @self.app.route('/documents', methods=['GET', 'POST'])
-        def manage_documents():
-            if request.method == 'POST':
-                data = request.json
-                new_doc = self.Documents(
-                    document_name=data['document_name'],
-                    file_path=data['file_path'],
-                    uploaded_by_user_id=data['uploaded_by_user_id'],
-                    category=data.get('category') # New: Add category
-                )
-                self.db.session.add(new_doc)
-                self.db.session.commit()
-                return jsonify({"message": "Document uploaded successfully", "document_id": new_doc.document_id}), 201
-            
-            elif request.method == 'GET':
-                docs = self.Documents.query.all()
-                result = []
-                for doc in docs:
-                    user = doc.uploaded_by
-                    result.append({
-                        "document_id": doc.document_id,
-                        "document_name": doc.document_name,
-                        "file_path": doc.file_path,
-                        "uploaded_by_user_id": doc.uploaded_by_user_id,
-                        "uploaded_by_user_name": user.name if user else "Unknown User",
-                        "upload_date": doc.upload_date.isoformat(),
-                        "category": doc.category # New: Include category
-                    })
-                return jsonify(result)
-
-        @self.app.route('/documents/<int:document_id>', methods=['DELETE'])
-        def delete_document(document_id):
-            doc = self.Documents.query.get_or_404(document_id)
-            self.db.session.delete(doc)
-            self.db.session.commit()
-            return jsonify({"message": "Document deleted successfully"}), 204
-
-        @self.app.route('/security-visitors', methods=['GET', 'POST'])
-        def manage_security_visitors():
-            if request.method == 'POST':
-                data = request.json
-                new_visitor = self.SecurityVisitors(
-                    user_id=data['user_id'],
-                    name=data['name'],
-                    phone=data.get('phone'),
-                    visit_date=datetime.fromisoformat(data['visit_date']).date(),
-                    visit_time=datetime.fromisoformat(data['visit_time']).time(),
-                    purpose=data.get('purpose')
-                )
-                self.db.session.add(new_visitor)
-                self.db.session.commit()
-                
-                user_name = new_visitor.user.name if new_visitor.user else 'Unknown User'
-                self.socketio.emit('new_visitor_registered', {
-                    'visitor_id': new_visitor.visitor_id,
-                    'name': new_visitor.name,
-                    'visit_date': new_visitor.visit_date.isoformat(),
-                    'user_id': new_visitor.user_id,
-                    'user_name': user_name # New: Include user name
-                }, room='admins')
-                return jsonify({"message": "Visitor registered successfully", "visitor_id": new_visitor.visitor_id}), 201
-            
-            elif request.method == 'GET':
-                visitors = self.SecurityVisitors.query.all()
-                result = [
-                    {
-                        "visitor_id": visitor.visitor_id,
-                        "user_id": visitor.user_id,
-                        "user_name": visitor.user.name if visitor.user else "Unknown User", # New: Include user name
-                        "name": visitor.name,
-                        "phone": visitor.phone,
-                        "visit_date": visitor.visit_date.isoformat(),
-                        "visit_time": visitor.visit_time.isoformat(),
-                        "purpose": visitor.purpose
-                    } for visitor in visitors
-                ]
-                return jsonify(result)
-
-        @self.app.route('/security-incidents', methods=['GET', 'POST'])
-        def manage_security_incidents():
-            if request.method == 'POST':
-                data = request.json
-                new_incident = self.SecurityIncidents(
-                    user_id=data['user_id'],
-                    description=data['description'],
-                    evidence_paths=data.get('evidence_paths')
-                )
-                self.db.session.add(new_incident)
-                self.db.session.commit()
-                
-                user_name = new_incident.user.name if new_incident.user else 'Unknown User'
-                self.socketio.emit('new_incident_reported', {
-                    'incident_id': new_incident.incident_id,
-                    'user_id': new_incident.user_id,
-                    'user_name': user_name, # New: Include user name
-                    'description': new_incident.description,
-                    'reported_date': new_incident.reported_date.isoformat()
-                }, room='admins')
-                return jsonify({"message": "Incident reported successfully", "incident_id": new_incident.incident_id}), 201
-            
-            elif request.method == 'GET':
-                incidents = self.SecurityIncidents.query.all()
-                result = [
-                    {
-                        "incident_id": inc.incident_id,
-                        "user_id": inc.user_id,
-                        "user_name": inc.user.name if inc.user else "Unknown User", # New: Include user name
-                        "description": inc.description,
-                        "reported_date": inc.reported_date.isoformat(),
-                        "evidence_paths": inc.evidence_paths
-                    } for inc in incidents
-                ]
-                return jsonify(result)
-
-        @self.app.route('/voting-polls', methods=['GET', 'POST'])
-        def manage_voting_polls():
-            if request.method == 'POST':
-                data = request.json
-                new_poll = self.VotingPolls(
-                    title=data['title'],
-                    description=data.get('description'),
-                    start_date=datetime.fromisoformat(data['start_date']).date(),
-                    end_date=datetime.fromisoformat(data['end_date']).date()
-                )
-                self.db.session.add(new_poll)
-                self.db.session.commit()
-                
-                # Add options if provided
-                if 'options' in data and isinstance(data['options'], list):
-                    for option_text in data['options']:
-                        new_option = self.VotingOptions(poll_id=new_poll.poll_id, option_text=option_text)
-                        self.db.session.add(new_option)
-                    self.db.session.commit()
-
-                return jsonify({"message": "Voting poll created successfully", "poll_id": new_poll.poll_id}), 201
-            
-            elif request.method == 'GET':
-                polls = self.VotingPolls.query.all()
-                result = []
-                for poll in polls:
-                    options = self.VotingOptions.query.filter_by(poll_id=poll.poll_id).all()
-                    total_votes = self.VotingResults.query.filter_by(poll_id=poll.poll_id).count()
-                    
-                    options_data = []
-                    for option in options:
-                        vote_count = self.VotingResults.query.filter_by(option_id=option.option_id).count()
-                        options_data.append({
-                            "option_id": option.option_id,
-                            "option_text": option.option_text,
-                            "vote_count": vote_count
-                        })
-
-                    result.append({
-                        "poll_id": poll.poll_id,
-                        "title": poll.title,
-                        "description": poll.description,
-                        "start_date": poll.start_date.isoformat(),
-                        "end_date": poll.end_date.isoformat(),
-                        "options": options_data, # New: Include options and their counts
-                        "total_votes": total_votes # New: Include total votes
-                    })
-                return jsonify(result)
-
-        @self.app.route('/voting-options', methods=['POST'])
-        def add_voting_option():
-            data = request.json
-            new_option = self.VotingOptions(
-                poll_id=data['poll_id'],
-                option_text=data['option_text']
-            )
-            self.db.session.add(new_option)
-            self.db.session.commit()
-            return jsonify({"message": "Voting option added successfully", "option_id": new_option.option_id}), 201
-
-        @self.app.route('/voting-results', methods=['GET', 'POST'])
-        def manage_voting_results():
-            if request.method == 'POST':
-                data = request.json
-                # Check if user already voted in this poll
-                existing_vote = self.VotingResults.query.filter_by(
-                    poll_id=data['poll_id'],
-                    user_id=data['user_id']
-                ).first()
-                if existing_vote:
-                    return jsonify({"message": "You have already voted in this poll."}), 409
-
-                new_result = self.VotingResults(
-                    poll_id=data['poll_id'],
-                    option_id=data['option_id'],
-                    user_id=data['user_id']
-                )
-                self.db.session.add(new_result)
-                self.db.session.commit()
-                return jsonify({"message": "Vote recorded successfully", "result_id": new_result.result_id}), 201
-            
-            elif request.method == 'GET':
-                results = self.VotingResults.query.all()
-                result = [
-                    {
-                        "result_id": res.result_id,
-                        "poll_id": res.poll_id,
-                        "option_id": res.option_id,
-                        "user_id": res.user_id
-                    } for res in results
-                ]
-                return jsonify(result)
+        .notification-bell:hover {
+            background-color: #f8f9fa;
+        }
         
-        @self.app.route('/chat-messages', methods=['GET'])
-        def get_chat_messages():
-            """API to get historical chat messages."""
-            messages = self.ChatMessages.query.order_by(self.ChatMessages.timestamp.asc()).all()
-            result = []
-            for msg in messages:
-                sender_user = msg.sender
-                sender_name = sender_user.name if sender_user else 'Unknown User'
-                sender_avatar = sender_user.avatar if sender_user else (sender_name[0].upper() if sender_name else '?')
-                result.append({
-                    'message_id': msg.message_id,
-                    'sender_id': msg.sender_id,
-                    'sender_name': sender_name,
-                    'sender_avatar': sender_avatar,
-                    'content': msg.content,
-                    'timestamp': msg.timestamp.isoformat(),
-                    'room_name': msg.room_name
-                })
-            return jsonify(result)
+        .notification-count {
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: #dc3545;
+            color: white;
+            border-radius: 50%;
+            min-width: 20px;
+            height: 20px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
 
-    def _setup_socketio_events(self):
-        """
-        Defines the SocketIO event handlers.
-        """
-        @self.socketio.on('connect')
-        def handle_connect():
-            print(f'Client {request.sid} connected')
-            # A client can join their specific user room for notifications
-            # and general chat room. Admin clients can join 'admins' room.
-            # This logic should ideally be tied to authentication.
-            # For now, assuming client sends user_id and role after connect.
+        /* Styles for notifications container added to style.css initially.
+           Ensure it's well-styled for pop-ups. */
+        .notification-container {
+            position: fixed;
+            top: 90px;
+            right: 20px;
+            z-index: 1500;
+            max-width: 400px;
+            /* Added for better visibility and management of multiple notifications */
+            display: flex;
+            flex-direction: column-reverse; /* New notifications appear at the bottom */
+            gap: 10px;
+        }
 
-        @self.socketio.on('disconnect')
-        def handle_disconnect():
-            print(f'Client {request.sid} disconnected')
-
-        @self.socketio.on('send_message')
-        def handle_send_message(data):
-            sender_id = data.get('sender_id')
-            content = data.get('content')
-            room_name = data.get('room_name', 'general_chat')
-
-            if not sender_id or not content:
-                emit('error', {'message': 'Missing sender_id or content'})
-                return
-
-            try:
-                new_message = self.ChatMessages(
-                    sender_id=sender_id,
-                    content=content,
-                    room_name=room_name
-                )
-                self.db.session.add(new_message)
-                self.db.session.commit()
-
-                sender_user = self.Users.query.get(sender_id)
-                sender_name = sender_user.name if sender_user else 'Unknown User'
-                sender_avatar = sender_user.avatar if sender_user else (sender_name[0].upper() if sender_name else '?')
-
-                message_payload = {
-                    'message_id': new_message.message_id,
-                    'sender_id': new_message.sender_id,
-                    'sender_name': sender_name,
-                    'sender_avatar': sender_avatar,
-                    'content': new_message.content,
-                    'timestamp': new_message.timestamp.isoformat(),
-                    'room_name': new_message.room_name
-                }
-                
-                self.socketio.emit('receive_message', message_payload, room=room_name)
-            except Exception as e:
-                self.db.session.rollback()
-                print(f"Error saving message: {e}")
-                emit('error', {'message': 'Failed to send message'})
-
-        @self.socketio.on('join_chat_room')
-        def handle_join_chat_room(data):
-            room_name = data.get('room_name')
-            if room_name:
-                join_room(room_name)
-                print(f"Client {request.sid} joined room: {room_name}")
-                emit('status', {'msg': f'Joined {room_name}'}, room=request.sid)
-
-        @self.socketio.on('leave_chat_room')
-        def handle_leave_chat_room(data):
-            room_name = data.get('room_name')
-            if room_name:
-                leave_room(room_name)
-                print(f"Client {request.sid} left room: {room_name}")
-                emit('status', {'msg': f'Left {room_name}'}, room=request.sid)
+        .notification {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            padding: 15px 20px;
+            border-left: 4px solid #667eea;
+            animation: slideIn 0.3s ease-out forwards; /* Changed for smoother animation */
+            opacity: 0; /* Start hidden for animation */
+            transform: translateX(100%); /* Start off-screen for animation */
+        }
         
-        # New: Event for clients to join their personal user room
-        @self.socketio.on('join_user_room')
-        def handle_join_user_room(data):
-            user_id = data.get('user_id')
-            if user_id:
-                room_name = f'user_{user_id}'
-                join_room(room_name)
-                print(f"Client {request.sid} joined user room: {room_name}")
-                emit('status', {'msg': f'Joined personal room {room_name}'}, room=request.sid)
+        .notification.success { border-left-color: #28a745; }
+        .notification.error { border-left-color: #dc3545; }
+        .notification.warning { border-left-color: #ffc107; }
+        .notification.info { border-left-color: #007bff; } /* Added for info notifications */
 
-    def run(self):
-        """
-        Runs the Flask application with SocketIO.
-        """
-        with self.app.app_context():
-            self.db.create_all() # ตรวจสอบและสร้างตารางหากยังไม่มี
-            
-            # Initial dummy users for testing
-            if not self.Users.query.filter_by(username='admin').first():
-                admin_user = self.Users(name='Admin User', username='admin', role='admin', email='admin@example.com', avatar='A', status='approved')
-                admin_user.set_password('admin123')
-                self.db.session.add(admin_user)
-                self.db.session.commit()
-                print("Admin user created: username='admin', password='admin123'")
-            
-            if not self.Users.query.filter_by(username='resident').first():
-                resident_user = self.Users(name='Resident User', username='resident', role='resident', email='resident@example.com', avatar='R', status='approved')
-                resident_user.set_password('resident123')
-                self.db.session.add(resident_user)
-                self.db.session.commit()
-                print("Resident user created: username='resident', password='resident123'")
-                
-        self.socketio.run(self.app, host='0.0.0.0', port=5000, debug=True)
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
 
-if __name__ == '__main__':
-    # Instantiate and run the SmartVillageApp
-    smart_village_app = SmartVillageApp()
-    smart_village_app.run()
+        /* CSS for modal (make sure it's not hidden by default if using display:none) */
+        .modal {
+            display: none; /* Controlled by JS */
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+            transform: translateY(-20px); /* Add slight animation for modal */
+            opacity: 0;
+            animation: fadeInModal 0.3s ease-out forwards;
+        }
 
+        @keyframes fadeInModal {
+            from { transform: translateY(-20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <div id="notificationContainer" class="notification-container"></div>
+
+    <div id="loginPage" class="login-container">
+        <div class="login-card fade-in">
+            <div class="logo">
+                <h1><i class="fas fa-home"></i></h1>
+                <h1>SMART VILLAGE</h1>
+                <p>ระบบจัดการหมู่บ้านออนไลน์</p>
+            </div>
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="username">ชื่อผู้ใช้</label>
+                    <input type="text" class="form-control" id="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">รหัสผ่าน</label>
+                    <div class="password-wrapper">
+                        <input type="password" class="form-control" id="password" required>
+                        <i class="fas fa-eye toggle-password" onclick="togglePasswordVisibility('password')"></i>
+                    </div>
+                </div>
+                <div class="form-group" style="display: flex; align-items: center;">
+                    <input type="checkbox" id="rememberMe" style="margin-right: 8px;">
+                    <label for="rememberMe" style="margin-bottom: 0;">จำฉันไว้</label>
+                </div>
+                <button type="submit" class="btn btn-primary">เข้าสู่ระบบ</button>
+                <div style="display: flex; justify-content: space-between;">
+                    <button type="button" class="btn btn-secondary" onclick="showRegister()">ลงทะเบียน</button>
+                    <a href="#" onclick="showForgotPassword()" style="align-self: center; color: #667eea;">ลืมรหัสผ่าน?</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="registerPage" class="login-container hidden">
+        <div class="register-card fade-in">
+            <div class="logo">
+                <h1><i class="fas fa-user-plus"></i></h1>
+                <h1>ลงทะเบียน</h1>
+                <p>สมัครสมาชิกใหม่</p>
+            </div>
+            <form id="registerForm">
+                <div class="form-group">
+                    <label for="regName">ชื่อ-นามสกุล</label>
+                    <input type="text" class="form-control" id="regName" required>
+                </div>
+                <div class="form-group">
+                    <label for="regUsername">ชื่อผู้ใช้</label>
+                    <input type="text" class="form-control" id="regUsername" required>
+                </div>
+                <div class="form-group">
+                    <label for="regPassword">รหัสผ่าน</label>
+                    <input type="password" class="form-control" id="regPassword" required>
+                </div>
+                <div class="form-group">
+                    <label for="regConfirmPassword">ยืนยันรหัสผ่าน</label>
+                    <input type="password" class="form-control" id="regConfirmPassword" required>
+                </div>
+                <div class="form-group">
+                    <label for="regPhone">เบอร์ติดต่อ</label>
+                    <input type="tel" class="form-control" id="regPhone" required>
+                </div>
+                <div class="form-group">
+                    <label for="regAddress">ที่อยู่ (บ้านเลขที่)</label>
+                    <input type="text" class="form-control" id="regAddress" required>
+                </div>
+                <button type="submit" class="btn btn-primary">ส่งคำขอลงทะเบียน</button>
+                <button type="button" class="btn btn-secondary" onclick="showLogin()">กลับไปเข้าสู่ระบบ</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="dashboard" class="dashboard hidden">
+        <div class="header">
+            <div class="header-content">
+                <h1><i class="fas fa-home"></i> ระบบจัดการหมู่บ้านจัดสรร</h1>
+                <div class="user-info">
+                    <div class="notification-bell" onclick="toggleNotifications()">
+                        <i class="fas fa-bell"></i>
+                        <span id="notificationCount" class="notification-count hidden">0</span>
+                    </div>
+                    <div class="user-avatar" id="userAvatar">A</div>
+                    <div>
+                        <div id="userName">ผู้ใช้งาน</div>
+                        <small id="userRole">บทบาท</small>
+                    </div>
+                    <button class="btn btn-secondary" onclick="logout()" style="margin-left: 15px; padding: 8px 16px;">
+                        <i class="fas fa-sign-out-alt"></i> ออกจากระบบ
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar" id="sidebar">
+            <ul class="sidebar-menu">
+                <li><a href="#" onclick="showPage('dashboard-home')" class="active"><i class="fas fa-tachometer-alt"></i> แดชบอร์ด</a></li>
+                <li><a href="#" onclick="showPage('profile')"><i class="fas fa-user"></i> ข้อมูลส่วนตัว</a></li>
+                <li class="resident-menu"><a href="#" onclick="showPage('repair-request')"><i class="fas fa-wrench"></i> แจ้งซ่อม</a></li>
+                <li><a href="#" onclick="showPage('announcements')"><i class="fas fa-bullhorn"></i> ประกาศ</a></li>
+                <li class="resident-menu"><a href="#" onclick="showPage('payments')"><i class="fas fa-credit-card"></i> ชำระเงิน</a></li>
+                <li class="resident-menu"><a href="#" onclick="showPage('booking')"><i class="fas fa-calendar"></i> จองพื้นที่</a></li>
+                <li><a href="#" onclick="showPage('calendar')"><i class="fas fa-calendar-alt"></i> ปฏิทินกิจกรรม</a></li>
+                <li><a href="#" onclick="showPage('chat')"><i class="fas fa-comments"></i> แชท</a></li>
+                <li><a href="#" onclick="showPage('documents')"><i class="fas fa-folder"></i> เอกสาร</a></li>
+                <li><a href="#" onclick="showPage('security')"><i class="fas fa-shield-alt"></i> ความปลอดภัย</a></li>
+                <li><a href="#" onclick="showPage('voting')"><i class="fas fa-vote-yea"></i> โหวต</a></li>
+                <li class="admin-menu hidden"><a href="#" onclick="showPage('manage-users')"><i class="fas fa-users"></i> จัดการผู้ใช้</a></li>
+                <li class="admin-menu hidden"><a href="#" onclick="showPage('manage-repairs')"><i class="fas fa-tools"></i> จัดการแจ้งซ่อม</a></li>
+                <li class="admin-menu hidden"><a href="#" onclick="showPage('manage-bills')"><i class="fas fa-file-invoice-dollar"></i> จัดการบิลค่าใช้จ่าย</a></li> <!-- NEW MENU ITEM -->
+                <li class="admin-menu hidden"><a href="#" onclick="showPage('reports')"><i class="fas fa-chart-bar"></i> รายงาน</a></li>
+            </ul>
+        </div>
+
+        <!-- Main content area where dynamic pages will be loaded -->
+        <div class="main-content">
+            <!-- Initial dashboard-home content (can be loaded dynamically or kept static) -->
+            <div id="dashboard-home" class="page-content">
+                <div class="page-title">
+                    <h2>แดชบอร์ด</h2>
+                    <p>ภาพรวมระบบจัดการหมู่บ้านจัดสรร</p>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon blue">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="totalResidents">248</h3>
+                            <p>ผู้อยู่อาศัย</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon orange">
+                            <i class="fas fa-wrench"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="pendingRepairs">12</h3>
+                            <p>งานซ่อมรอดำเนินการ</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green">
+                            <i class="fas fa-check-circle"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="completedRepairs">156</h3>
+                            <p>งานซ่อมเสร็จสิ้น</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon red">
+                            <i class="fas fa-exclamation-circle"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3 id="unpaidBills">8</h3>
+                            <p>บิลค้างชำระ</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">กิจกรรมล่าสุด</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>เวลา</th>
+                                    <th>กิจกรรม</th>
+                                    <th>ผู้ใช้</th>
+                                    <th>สถานะ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="recentActivities">
+                                <tr>
+                                    <td>10:30</td>
+                                    <td>แจ้งซ่อมไฟฟ้า</td>
+                                    <td>คุณสมชาย ใจดี</td>
+                                    <td><span class="status-badge status-pending">รอรับเรื่อง</span></td>
+                                </tr>
+                                <tr>
+                                    <td>09:15</td>
+                                    <td>ชำระค่าส่วนกลาง</td>
+                                    <td>คุณมาลี สวยใส</td>
+                                    <td><span class="status-badge status-completed">สำเร็จ</span></td>
+                                </tr>
+                                <tr>
+                                    <td>08:45</td>
+                                    <td>จองสนามกีฬา</td>
+                                    <td>คุณวิชัย กล้าหาญ</td>
+                                    <td><span class="status-badge status-approved">อนุมัติ</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <!-- Other page content divs will be toggled here by showPage function -->
+            <div id="profile" class="page-content hidden">
+                <div class="page-title">
+                    <h2>ข้อมูลส่วนตัว</h2>
+                    <p>จัดการข้อมูลส่วนตัวของคุณ</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">แก้ไขข้อมูลส่วนตัว</h3>
+                    </div>
+                    <form id="profileForm" style="padding: 20px 30px;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="profileName">ชื่อ-นามสกุล</label>
+                                <input type="text" class="form-control" id="profileName">
+                            </div>
+                            <div class="form-group">
+                                <label for="profilePhone">เบอร์ติดต่อ</label>
+                                <input type="tel" class="form-control" id="profilePhone">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="profileEmail">อีเมล</label>
+                                <input type="email" class="form-control" id="profileEmail">
+                            </div>
+                            <div class="form-group">
+                                <label for="profileAddress">ที่อยู่</label>
+                                <input type="text" class="form-control" id="profileAddress">
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>อัปโหลดเอกสาร</label>
+                            <div class="file-upload" onclick="document.getElementById('profileDocuments').click()">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <p>คลิกเพื่อเลือกไฟล์<br><small>บัตรประชาชน, ทะเบียนบ้าน</small></p>
+                                <input type="file" id="profileDocuments" multiple style="display: none;" accept=".pdf,.jpg,.png">
+                            </div>
+                            <div id="profileDocumentsPreview" style="margin-top: 10px;"></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">บันทึกข้อมูล</button>
+                    </form>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">เปลี่ยนรหัสผ่าน</h3>
+                    </div>
+                    <form id="changePasswordForm" style="padding: 20px 30px;">
+                        <div class="form-group">
+                            <label for="currentPassword">รหัสผ่านปัจจุบัน</label>
+                            <input type="password" class="form-control" id="currentPassword" required>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="newPassword">รหัสผ่านใหม่</label>
+                                <input type="password" class="form-control" id="newPassword" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="confirmNewPassword">ยืนยันรหัสผ่านใหม่</label>
+                                <input type="password" class="form-control" id="confirmNewPassword" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">เปลี่ยนรหัสผ่าน</button>
+                    </form>
+                </div>
+            </div>
+
+            <div id="repair-request" class="page-content hidden">
+                <div class="page-title">
+                    <h2>แจ้งซ่อม</h2>
+                    <p>แจ้งปัญหาและติดตามสถานะงานซ่อม</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">แจ้งปัญหาใหม่</h3>
+                    </div>
+                    <form id="repairForm" style="padding: 20px 30px;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="repairTitle">หัวข้อปัญหา</label>
+                                <input type="text" class="form-control" id="repairTitle" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="repairCategory">หมวดหมู่</label>
+                                <select class="form-control" id="repairCategory" required>
+                                    <option value="">เลือกหมวดหมู่</option>
+                                    <option value="ไฟฟ้า">ไฟฟ้า</option>
+                                    <option value="น้ำประปา">น้ำประปา</option>
+                                    <option value="แอร์">แอร์</option>
+                                    <option value="อื่นๆ">อื่นๆ</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="repairDescription">รายละเอียดปัญหา</label>
+                            <textarea class="form-control" id="repairDescription" rows="4" required></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>อัปโหลดรูปภาพ</label>
+                            <div class="file-upload" onclick="document.getElementById('repairImages').click()">
+                                <i class="fas fa-camera"></i>
+                                <p>คลิกเพื่อเลือกไฟล์<br><small>รองรับ .jpg, .png</small></p>
+                                <input type="file" id="repairImages" multiple style="display: none;" accept=".jpg,.png">
+                            </div>
+                            <div id="repairImagesPreview" style="margin-top: 10px;"></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">ส่งคำขอแจ้งซ่อม</button>
+                    </form>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">สถานะงานซ่อมของคุณ</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>รหัส</th>
+                                    <th>หัวข้อ</th>
+                                    <th>หมวดหมู่</th>
+                                    <th>วันที่แจ้ง</th>
+                                    <th>สถานะ</th>
+                                    <th>การดำเนินการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="repairStatusTable">
+                                <tr>
+                                    <td>#001</td>
+                                    <td>ไฟทางเดินเสีย</td>
+                                    <td>ไฟฟ้า</td>
+                                    <td>2023-10-26</td>
+                                    <td><span class="status-badge status-pending">รอรับเรื่อง</span></td>
+                                    <td><button class="btn btn-secondary btn-sm">ดูรายละเอียด</button></td>
+                                </tr>
+                                <tr>
+                                    <td>#002</td>
+                                    <td>น้ำรั่วซึม</td>
+                                    <td>น้ำประปา</td>
+                                    <td>2023-10-20</td>
+                                    <td><span class="status-badge status-progress">กำลังดำเนินการ</span></td>
+                                    <td><button class="btn btn-secondary btn-sm">ดูรายละเอียด</button></td>
+                                </tr>
+                                <tr>
+                                    <td>#003</td>
+                                    <td>แอร์ไม่เย็น</td>
+                                    <td>แอร์</td>
+                                    <td>2023-10-15</td>
+                                    <td><span class="status-badge status-completed">เสร็จสิ้น</span></td>
+                                    <td><button class="btn btn-secondary btn-sm">ดูรายละเอียด</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="announcements" class="page-content hidden">
+                <div class="page-title">
+                    <h2>ประกาศ</h2>
+                    <p>ข่าวสารและประกาศสำคัญของหมู่บ้าน</p>
+                </div>
+
+                <!-- Admin: Add New Announcement Button -->
+                <div class="card admin-menu hidden">
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3 class="card-title">จัดการประกาศ</h3>
+                        <button class="btn btn-primary" onclick="showAddAnnouncementModal()">
+                            <i class="fas fa-plus"></i> เพิ่มประกาศใหม่
+                        </button>
+                    </div>
+                    <!-- This section can be used for a table of all announcements for admin to manage -->
+                    <div class="table-container" style="padding: 20px;">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>หัวข้อ</th>
+                                    <th>วันที่</th>
+                                    <th>โดย</th>
+                                    <th>การดำเนินการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adminAnnouncementsTable">
+                                <!-- Announcements will be dynamically loaded here for admin to manage -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">ประกาศล่าสุด</h3>
+                    </div>
+                    <div id="announcementsList" style="padding: 20px 30px;">
+                        <!-- Existing announcements (and new ones) will be loaded here -->
+                        <div class="announcement-item" style="border-left: 4px solid #667eea; padding-left: 20px; margin-bottom: 25px;">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                                <h4 style="color: #333; margin: 0;">ประชุมคณะกรรมการประจำเดือน</h4>
+                                <span style="color: #666; font-size: 14px;">2023-10-26</span>
+                            </div>
+                            <p style="color: #666; line-height: 1.6; margin-bottom: 10px;">
+                                เรียนเชิญสมาชิกทุกท่านเข้าร่วมประชุมคณะกรรมการประจำเดือน พฤศจิกายน 2567
+                                ในวันที่ 15 พฤศจิกายน 2567 เวลา 19:00 น. ณ ห้องประชุมอาคาร A
+                            </p>
+                            <div style="display: flex; gap: 10px;">
+                                <span class="status-badge" style="background: #e3f2fd; color: #1976d2;">สำคัญ</span>
+                                <span style="color: #666; font-size: 14px;"><i class="fas fa-user"></i> โดย: คณะกรรมการ</span>
+                            </div>
+                            <!-- Admin actions for each announcement item -->
+                            <div class="admin-actions hidden" style="margin-top: 15px;">
+                                <button class="btn btn-secondary btn-sm" onclick="editAnnouncement('announcement1')">แก้ไข</button>
+                                <button class="btn btn-secondary btn-sm" onclick="deleteAnnouncement('announcement1')">ลบ</button>
+                            </div>
+                        </div>
+
+                        <div class="announcement-item" style="border-left: 4px solid #28a745; padding-left: 20px; margin-bottom: 25px;">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                                <h4 style="color: #333; margin: 0;">กิจกรรมทำความสะอาดหมู่บ้าน</h4>
+                                <span style="color: #666; font-size: 14px;">2023-10-24</span>
+                            </div>
+                            <p style="color: #666; line-height: 1.6; margin-bottom: 10px;">
+                                ขอเชิญชวนสมาชิกทุกครอบครัวร่วมกิจกรรมทำความสะอาดหมู่บ้าน
+                                ในวันเสาร์ที่ 18 พฤศจิกายน 2567 เวลา 08:00-12:00 น.
+                                จุดนัดพบ: ลานจอดรถกลาง
+                            </p>
+                            <div style="display: flex; gap: 10px;">
+                                <span class="status-badge" style="background: #e8f5e8; color: #2e7d32;">กิจกรรม</span>
+                                <span style="color: #666; font-size: 14px;"><i class="fas fa-user"></i> โดย: คณะกรรมการ</span>
+                            </div>
+                            <!-- Admin actions for each announcement item -->
+                            <div class="admin-actions hidden" style="margin-top: 15px;">
+                                <button class="btn btn-secondary btn-sm" onclick="editAnnouncement('announcement2')">แก้ไข</button>
+                                <button class="btn btn-secondary btn-sm" onclick="deleteAnnouncement('announcement2')">ลบ</button>
+                            </div>
+                        </div>
+
+                        <div class="announcement-item" style="border-left: 4px solid #ffc107; padding-left: 20px; margin-bottom: 25px;">
+                            <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                                <h4 style="color: #333; margin: 0;">แจ้งปรับปรุงระบบน้ำประปา</h4>
+                                <span style="color: #666; font-size: 14px;">2023-10-22</span>
+                            </div>
+                            <p style="color: #666; line-height: 1.6; margin-bottom: 10px;">
+                                จะมีการปรับปรุงระบบน้ำประปาในวันที่ 5-6 พฤศจิกายน 2567
+                                เวลา 09:00-17:00 น. อาจมีการหยุดจ่ายน้ำชั่วคราว
+                                ขออภัยในความไม่สะดวก
+                            </p>
+                            <div style="display: flex; gap: 10px;">
+                                <span class="status-badge" style="background: #fff3cd; color: #856404;">แจ้งเตือน</span>
+                                <span style="color: #666; font-size: 14px;"><i class="fas fa-user"></i> โดย: ฝ่ายซ่อมบำรุง</span>
+                            </div>
+                            <!-- Admin actions for each announcement item -->
+                            <div class="admin-actions hidden" style="margin-top: 15px;">
+                                <button class="btn btn-secondary btn-sm" onclick="editAnnouncement('announcement3')">แก้ไข</button>
+                                <button class="btn btn-secondary btn-sm" onclick="deleteAnnouncement('announcement3')">ลบ</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="payments" class="page-content hidden">
+                <div class="page-title">
+                    <h2>ชำระเงิน</h2>
+                    <p>จัดการการชำระค่าส่วนกลางและค่าบริการต่างๆ</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">บิลค้างชำระ</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>รายการ</th>
+                                    <th>ยอดเงิน</th>
+                                    <th>กำหนดชำระ</th>
+                                    <th>สถานะ</th>
+                                    <th>การดำเนินการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="paymentTable">
+                                <tr>
+                                    <td>ค่าส่วนกลาง เดือน พ.ย. 67</td>
+                                    <td>1,500 บาท</td>
+                                    <td>2023-11-30</td>
+                                    <td><span class="status-badge status-unpaid">ยังไม่ชำระ</span></td>
+                                    <td><button class="btn btn-primary btn-sm" onclick="payBill('common_fee_nov')">ชำระเงิน</button></td>
+                                </tr>
+                                <tr>
+                                    <td>ค่าจอดรถเพิ่มเติม</td>
+                                    <td>300 บาท</td>
+                                    <td>2023-11-15</td>
+                                    <td><span class="status-badge status-unpaid">ยังไม่ชำระ</span></td>
+                                    <td><button class="btn btn-primary btn-sm" onclick="payBill('parking_fee')">ชำระเงิน</button></td>
+                                </tr>
+                                <tr>
+                                    <td>ค่าส่วนกลาง เดือน ต.ค. 67</td>
+                                    <td>1,500 บาท</td>
+                                    <td>2023-10-31</td>
+                                    <td><span class="status-badge status-paid">ชำระแล้ว</span></td>
+                                    <td><button class="btn btn-secondary btn-sm">ดูใบเสร็จ</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">ประวัติการชำระเงิน</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>วันที่ชำระ</th>
+                                    <th>รายการ</th>
+                                    <th>ยอดเงิน</th>
+                                    <th>วิธีชำระ</th>
+                                    <th>ใบเสร็จ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="paymentHistoryTable">
+                                <tr>
+                                    <td>2023-10-25</td>
+                                    <td>ค่าส่วนกลาง เดือน ต.ค. 67</td>
+                                    <td>1,500 บาท</td>
+                                    <td>โอนเงิน</td>
+                                    <td><button class="btn btn-secondary btn-sm">ดาวน์โหลด</button></td>
+                                </tr>
+                                <tr>
+                                    <td>2023-09-28</td>
+                                    <td>ค่าส่วนกลาง เดือน ก.ย. 67</td>
+                                    <td>1,500 บาท</td>
+                                    <td>โอนเงิน</td>
+                                    <td><button class="btn btn-secondary btn-sm">ดาวน์โหลด</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="booking" class="page-content hidden">
+                <div class="page-title">
+                    <h2>จองพื้นที่</h2>
+                    <p>จองสถานที่และอุปกรณ์ภายในหมู่บ้าน</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">จองสถานที่</h3>
+                    </div>
+                    <form id="bookingForm" style="padding: 20px 30px;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="bookingLocation">เลือกสถานที่</label>
+                                <select class="form-control" id="bookingLocation" required>
+                                    <option value="">เลือกสถานที่</option>
+                                    <option value="สนามกีฬา">สนามกีฬา</option>
+                                    <option value="สระว่ายน้ำ">สระว่ายน้ำ</option>
+                                    <option value="คลับเฮ้าส์">คลับเฮ้าส์</option>
+                                    <option value="ห้องประชุม">ห้องประชุม</option>
+                                    <option value="สนามเด็กเล่น">สนามเด็กเล่น</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="bookingDate">วันที่</label>
+                                <input type="date" class="form-control" id="bookingDate" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="bookingTimeStart">เวลาเริ่ม</label>
+                                <input type="time" class="form-control" id="bookingTimeStart" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="bookingTimeEnd">เวลาสิ้นสุด</label>
+                                <input type="time" class="form-control" id="bookingTimeEnd" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="bookingPurpose">วัตถุประสงค์</label>
+                            <textarea class="form-control" id="bookingPurpose" rows="3" required></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="attendeeCount">จำนวนผู้เข้าร่วม</label>
+                            <input type="number" class="form-control" id="attendeeCount" min="1" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">ส่งคำขอจอง</button>
+                    </form>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">การจองของคุณ</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>สถานที่</th>
+                                    <th>วันที่</th>
+                                    <th>เวลา</th>
+                                    <th>สถานะ</th>
+                                    <th>การดำเนินการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="bookingTable">
+                                <tr>
+                                    <td>สนามกีฬา</td>
+                                    <td>2023-11-05</td>
+                                    <td>14:00-16:00</td>
+                                    <td><span class="status-badge status-approved">อนุมัติ</span></td>
+                                    <td><button class="btn btn-secondary btn-sm">ยกเลิก</button></td>
+                                </tr>
+                                <tr>
+                                    <td>คลับเฮ้าส์</td>
+                                    <td>2023-11-12</td>
+                                    <td>18:00-22:00</td>
+                                    <td><span class="status-badge status-pending">รอการอนุมัติ</span></td>
+                                    <td><button class="btn btn-secondary btn-sm">แก้ไข</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="calendar" class="page-content hidden">
+                <div class="page-title">
+                    <h2>ปฏิทินกิจกรรม</h2>
+                    <p>กิจกรรมและเหตุการณ์สำคัญของหมู่บ้าน</p>
+                </div>
+
+                <div class="card">
+                    <div class="calendar-container">
+                        <div class="calendar-header">
+                            <button class="calendar-nav" onclick="previousMonth()">
+                                <i class="fas fa-chevron-left"></i>
+                            </button>
+                            <h3 id="currentMonth">พฤศจิกายน 2567</h3>
+                            <button class="calendar-nav" onclick="nextMonth()">
+                                <i class="fas fa-chevron-right"></i>
+                            </button>
+                        </div>
+                        <div class="calendar-grid" id="calendarGrid">
+                            </div>
+                    </div>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">กิจกรรมที่กำลังจะมาถึง</h3>
+                    </div>
+                    <div id="upcomingEvents">
+                        <div style="padding: 20px;">
+                            <div class="event-item" style="border-left: 4px solid #667eea; padding-left: 15px; margin-bottom: 15px;">
+                                <h4 style="margin: 0; color: #333;">ประชุมคณะกรรมการ</h4>
+                                <p style="margin: 5px 0; color: #666;">15 พฤศจิกายน 2567 - 19:00 น.</p>
+                                <p style="margin: 0; color: #888;">ห้องประชุมอาคาร A</p>
+                            </div>
+                            <div class="event-item" style="border-left: 4px solid #28a745; padding-left: 15px; margin-bottom: 15px;">
+                                <h4 style="margin: 0; color: #333;">ทำความสะอาดหมู่บ้าน</h4>
+                                <p style="margin: 5px 0; color: #666;">18 พฤศจิกายน 2567 - 08:00 น.</p>
+                                <p style="margin: 0; color: #888;">จุดนัดพบ: ลานจอดรถกลาง</p>
+                            </div>
+                            <div class="event-item" style="border-left: 4px solid #ffc107; padding-left: 15px; margin-bottom: 15px;">
+                                <h4 style="margin: 0; color: #333;">งานเลี้ยงสังสรรค์ปีใหม่</h4>
+                                <p style="margin: 5px 0; color: #666;">31 ธันวาคม 2567 - 18:00 น.</p>
+                                <p style="margin: 0; color: #888;">คลับเฮ้าส์</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="chat" class="page-content hidden">
+                <div class="page-title">
+                    <h2>แชท</h2>
+                    <p>สื่อสารกับเจ้าหน้าที่และเพื่อนบ้าน</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">แชทกับเจ้าหน้าที่</h3>
+                    </div>
+                    <div class="chat-container">
+                        <div class="chat-messages" id="chatMessages">
+                            <!-- Chat messages will be dynamically loaded here -->
+                            <div class="chat-message">
+                                <div class="user-avatar" style="min-width: 35px; height: 35px; font-size: 14px;">A</div>
+                                <div class="message-content">
+                                    <strong>เจ้าหน้าที่</strong>
+                                    <p>สวัสดีค่ะ มีอะไรให้ช่วยเหลือไหมคะ?</p>
+                                    <small>10:30 น.</small>
+                                </div>
+                            </div>
+                            <div class="chat-message own">
+                                <div class="user-avatar" style="min-width: 35px; height: 35px; font-size: 14px;">U</div>
+                                <div class="message-content">
+                                    <p>สอบถามเรื่องการจองสระว่ายน้ำหน่อยครับ</p>
+                                    <small>10:32 น.</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chat-input">
+                            <input type="text" id="chatInput" placeholder="พิมพ์ข้อความ...">
+                            <button onclick="sendMessage()">
+                                <i class="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">กลุ่มแชท</h3>
+                    </div>
+                    <div style="padding: 20px;">
+                        <div class="chat-group" style="padding: 15px; border: 1px solid #eee; border-radius: 10px; margin-bottom: 10px; cursor: pointer;" onclick="openGroupChat('general')">
+                            <h4 style="margin: 0; color: #667eea;">💬 แชททั่วไป</h4>
+                            <p style="margin: 5px 0 0; color: #666;">สมาชิก 248 คน</p>
+                        </div>
+                        <div class="chat-group" style="padding: 15px; border: 1px solid #eee; border-radius: 10px; margin-bottom: 10px; cursor: pointer;" onclick="openGroupChat('building-a')">
+                            <h4 style="margin: 0; color: #28a745;">🏢 อาคาร A</h4>
+                            <p style="margin: 5px 0 0; color: #666;">สมาชิก 62 คน</p>
+                        </div>
+                        <div class="chat-group" style="padding: 15px; border: 1px solid #eee; border-radius: 10px; margin-bottom: 10px; cursor: pointer;" onclick="openGroupChat('committee')">
+                            <h4 style="margin: 0; color: #ffc107;">👥 คณะกรรมการ</h4>
+                            <p style="margin: 5px 0 0; color: #666;">สมาชิก 12 คน</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="documents" class="page-content hidden">
+                <div class="page-title">
+                    <h2>เอกสาร</h2>
+                    <p>จัดการเอกสารและไฟล์สำคัญ</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">อัปโหลดเอกสาร</h3>
+                    </div>
+                    <form id="documentUploadForm" style="padding: 20px 30px;">
+                        <div class="form-group">
+                            <label for="docTitle">ชื่อเอกสาร</label>
+                            <input type="text" class="form-control" id="docTitle" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="docCategory">หมวดหมู่</label>
+                            <select class="form-control" id="docCategory" required>
+                                <option value="">เลือกหมวดหมู่</option>
+                                <option value="personal">เอกสารส่วนตัว</option>
+                                <option value="contract">สัญญา</option>
+                                <option value="receipt">ใบเสร็จ</option>
+                                <option value="other">อื่นๆ</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>อัปโหลดไฟล์</label>
+                            <div class="file-upload" onclick="document.getElementById('documentFile').click()">
+                                <i class="fas fa-cloud-upload-alt"></i>
+                                <p>คลิกเพื่อเลือกไฟล์<br><small>รองรับ PDF, JPG, PNG</small></p>
+                                <input type="file" id="documentFile" style="display: none;" accept=".pdf,.jpg,.png,.doc,.docx">
+                            </div>
+                            <div id="documentFilePreview" style="margin-top: 10px;"></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">บันทึกเอกสาร</button>
+                    </form>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">เอกสารของคุณ</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>ชื่อเอกสาร</th>
+                                    <th>หมวดหมู่</th>
+                                    <th>วันที่อัปโหลด</th>
+                                    <th>ขนาดไฟล์</th>
+                                    <th>การดำเนินการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="documentsTable">
+                                <tr>
+                                    <td>สำเนาบัตรประชาชน</td>
+                                    <td>เอกสารส่วนตัว</td>
+                                    <td>2023-10-15</td>
+                                    <td>2.5 MB</td>
+                                    <td>
+                                        <button class="btn btn-secondary btn-sm">ดู</button>
+                                        <button class="btn btn-primary btn-sm">ดาวน์โหลด</button>
+                                        <button class="btn btn-secondary btn-sm" onclick="deleteDocument('doc1')">ลบ</button>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>ใบเสร็จค่าส่วนกลาง</td>
+                                    <td>ใบเสร็จ</td>
+                                    <td>2023-10-10</td>
+                                    <td>1.2 MB</td>
+                                    <td>
+                                        <button class="btn btn-secondary btn-sm">ดู</button>
+                                        <button class="btn btn-primary btn-sm">ดาวน์โหลด</button>
+                                        <button class="btn btn-secondary btn-sm" onclick="deleteDocument('doc2')">ลบ</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="security" class="page-content hidden">
+                <div class="page-title">
+                    <h2>ความปลอดภัย</h2>
+                    <p>จัดการความปลอดภัยและผู้มาเยือน</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">แจ้งผู้มาเยือน</h3>
+                    </div>
+                    <form id="visitorForm" style="padding: 20px 30px;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="visitorName">ชื่อผู้มาเยือน</label>
+                                <input type="text" class="form-control" id="visitorName" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="visitorPhone">เบอร์ติดต่อ</label>
+                                <input type="tel" class="form-control" id="visitorPhone" required>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="visitDate">วันที่มาเยือน</label>
+                                <input type="date" class="form-control" id="visitDate" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="visitTime">เวลา</label>
+                                <input type="time" class="form-control" id="visitTime" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="visitPurpose">วัตถุประสงค์การมาเยือน</label>
+                            <textarea class="form-control" id="visitPurpose" rows="3" required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary">แจ้งผู้มาเยือน</button>
+                    </form>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">รายงานเหตุการณ์ผิดปกติ</h3>
+                    </div>
+                    <form id="incidentForm" style="padding: 20px 30px;">
+                        <div class="form-group">
+                            <label for="incidentType">ประเภทเหตุการณ์</label>
+                            <select class="form-control" id="incidentType" required>
+                                <option value="">เลือกประเภท</option>
+                                <option value="theft">การโจรกรรม</option>
+                                <option value="damage">ความเสียหาย</option>
+                                <option value="noise">เสียงรบกวน</option>
+                                <option value="safety">ความปลอดภัย</option>
+                                <option value="other">อื่นๆ</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="incidentLocation">สถานที่เกิดเหตุ</label>
+                            <input type="text" class="form-control" id="incidentLocation" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="incidentDescription">รายละเอียดเหตุการณ์</label>
+                            <textarea class="form-control" id="incidentDescription" rows="4" required></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>หลักฐาน (รูปภาพ/วิดีโอ)</label>
+                            <div class="file-upload" onclick="document.getElementById('incidentEvidence').click()">
+                                <i class="fas fa-camera"></i>
+                                <p>คลิกเพื่อเลือกไฟล์<br><small>รองรับ JPG, PNG, MP4</small></p>
+                                <input type="file" id="incidentEvidence" multiple style="display: none;" accept=".jpg,.png,.mp4">
+                            </div>
+                            <div id="incidentEvidencePreview" style="margin-top: 10px;"></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">ส่งรายงาน</button>
+                    </form>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">QR Code เข้า-ออกหมู่บ้าน</h3>
+                    </div>
+                    <div style="padding: 20px 30px; text-align: center;">
+                        <div style="background: white; padding: 20px; border-radius: 10px; display: inline-block; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
+                            <div style="width: 200px; height: 200px; background: #f8f9fa; border: 2px dashed #dee2e6; display: flex; align-items: center; justify-content: center; margin-bottom: 15px;">
+                                <i class="fas fa-qrcode" style="font-size: 60px; color: #667eea;"></i>
+                            </div>
+                            <p><strong>QR Code ส่วนตัว</strong></p>
+                            <p style="color: #666; font-size: 14px;">แสดงรหัสนี้เพื่อเข้า-ออกหมู่บ้าน</p>
+                            <button class="btn btn-primary btn-sm">รีเซ็ต QR Code</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="voting" class="page-content hidden">
+                <div class="page-title">
+                    <h2>โหวต</h2>
+                    <p>มีส่วนร่วมในการตัดสินใจของหมู่บ้าน</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">การโหวตที่เปิดอยู่</h3>
+                    </div>
+                    <div style="padding: 20px 30px;">
+                        <div class="voting-item" style="border: 1px solid #eee; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                            <h4 style="color: #333; margin-bottom: 10px;">เลือกสีทาสนามเด็กเล่นใหม่</h4>
+                            <p style="color: #666; margin-bottom: 15px;">กำหนดปิดโหวต: 30 พฤศจิกายน 2567</p>
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+                                    <input type="radio" name="playground_color" value="blue" style="margin-right: 8px;">
+                                    สีน้ำเงิน (12 โหวต)
+                                </label>
+                                <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+                                    <input type="radio" name="playground_color" value="green" style="margin-right: 8px;">
+                                    สีเขียว (18 โหวต)
+                                </label>
+                                <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+                                    <input type="radio" name="playground_color" value="yellow" style="margin-right: 8px;">
+                                    สีเหลือง (8 โหวต)
+                                </label>
+                            </div>
+                            <button type="button" class="btn btn-primary btn-sm" onclick="submitVote('playground_color')">โหวต</button>
+                            <span style="margin-left: 15px; color: #666;">รวม 38 โหวต</span>
+                        </div>
+
+                        <div class="voting-item" style="border: 1px solid #eee; border-radius: 10px; padding: 20px; margin-bottom: 20px;">
+                            <h4 style="color: #333; margin-bottom: 10px;">งบประมาณปรับปรุงสระว่ายน้ำ</h4>
+                            <p style="color: #666; margin-bottom: 15px;">กำหนดปิดโหวต: 15 ธันวาคม 2567</p>
+                            <div style="margin-bottom: 15px;">
+                                <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+                                    <input type="radio" name="pool_budget" value="approve" style="margin-right: 8px;">
+                                    เห็นด้วย (งบประมาณ 500,000 บาท) - 25 โหวต
+                                </label>
+                                <label style="display: block; margin-bottom: 8px; cursor: pointer;">
+                                    <input type="radio" name="pool_budget" value="disapprove" style="margin-right: 8px;">
+                                    ไม่เห็นด้วย - 8 โหวต
+                                </label>
+                            </div>
+                            <button type="button" class="btn btn-primary btn-sm" onclick="submitVote('pool_budget')">โหวต</button>
+                            <span style="margin-left: 15px; color: #666;">รวม 33 โหวต</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-20">
+                    <div class="card-header">
+                        <h3 class="card-title">ประวัติการโหวต</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>หัวข้อ</th>
+                                    <th>วันที่โหวต</th>
+                                    <th>ตัวเลือกที่เลือก</th>
+                                    <th>ผลโหวต</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>เลือกคณะกรรมการชุดใหม่</td>
+                                    <td>2023-09-15</td>
+                                    <td>รายชื่อ A</td>
+                                    <td><span class="status-badge status-approved">ผ่าน</span></td>
+                                </tr>
+                                <tr>
+                                    <td>ปรับค่าส่วนกลาง</td>
+                                    <td>2023-08-20</td>
+                                    <td>ไม่เห็นด้วย</td>
+                                    <td><span class="status-badge status-unpaid">ไม่ผ่าน</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="manage-users" class="page-content hidden">
+                <div class="page-title">
+                    <h2>จัดการผู้ใช้</h2>
+                    <p>จัดการข้อมูลผู้อยู่อาศัยและสิทธิ์การใช้งาน</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3 class="card-title">รายชื่อผู้ใช้ทั้งหมด</h3>
+                        <!-- NEW: Add User Button for Admin -->
+                        <button class="btn btn-primary admin-menu" onclick="showAddUserModal()">
+                            <i class="fas fa-plus"></i> เพิ่มผู้ใช้ใหม่
+                        </button>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>ชื่อ-นามสกุล</th>
+                                    <th>ที่อยู่</th>
+                                    <th>เบอร์ติดต่อ</th>
+                                    <th>สถานะ</th>
+                                    <th>บทบาท</th>
+                                    <th>การดำเนินการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="manageUsersTable">
+                                <tr>
+                                    <td>นายสมชาย ใจดี</td>
+                                    <td>A-101</td>
+                                    <td>081-234-5678</td>
+                                    <td><span class="status-badge status-approved">อนุมัติ</span></td>
+                                    <td>ผู้อยู่อาศัย</td>
+                                    <td>
+                                        <button class="btn btn-secondary btn-sm">แก้ไข</button>
+                                        <button class="btn btn-secondary btn-sm">ระงับ</button>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>นางมาลี สวยใส</td>
+                                    <td>B-205</td>
+                                    <td>089-876-5432</td>
+                                    <td><span class="status-badge status-pending">รอการอนุมัติ</span></td>
+                                    <td>ผู้อยู่อาศัย</td>
+                                    <td>
+                                        <button class="btn btn-primary btn-sm">อนุมัติ</button>
+                                        <button class="btn btn-secondary btn-sm">ปฏิเสธ</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="manage-repairs" class="page-content hidden">
+                <div class="page-title">
+                    <h2>จัดการแจ้งซ่อม</h2>
+                    <p>ติดตามและจัดการคำขอแจ้งซ่อมทั้งหมด</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">รายการแจ้งซ่อมทั้งหมด</h3>
+                    </div>
+                    <div class="table-container">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>รหัส</th>
+                                    <th>ผู้แจ้ง</th>
+                                    <th>หัวข้อ</th>
+                                    <th>หมวดหมู่</th>
+                                    <th>วันที่แจ้ง</th>
+                                    <th>สถานะ</th>
+                                    <th>การดำเนินการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="manageRepairsTable">
+                                <tr>
+                                    <td>#001</td>
+                                    <td>นายสมชาย ใจดี</td>
+                                    <td>ไฟทางเดินเสีย</td>
+                                    <td>ไฟฟ้า</td>
+                                    <td>2023-10-26</td>
+                                    <td><span class="status-badge status-pending">รอรับเรื่อง</span></td>
+                                    <td>
+                                        <button class="btn btn-primary btn-sm" onclick="updateRepairStatus(1, 'in_progress')">รับเรื่อง</button>
+                                        <button class="btn btn-primary btn-sm" onclick="updateRepairStatus(1, 'completed')">เสร็จสิ้น</button>
+                                        <button class="btn btn-secondary btn-sm" onclick="viewRepairDetails(1)">ดูรายละเอียด</button>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td>#002</td>
+                                    <td>นางมาลี สวยใส</td>
+                                    <td>น้ำรั่วซึม</td>
+                                    <td>น้ำประปา</td>
+                                    <td>2023-10-20</td>
+                                    <td><span class="status-badge status-progress">กำลังดำเนินการ</span></td>
+                                    <td>
+                                        <button class="btn btn-primary btn-sm" onclick="updateRepairStatus(2, 'completed')">เสร็จสิ้น</button>
+                                        <button class="btn btn-secondary btn-sm" onclick="viewRepairDetails(2)">ดูรายละเอียด</button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NEW PAGE: Manage Bills -->
+            <div id="manage-bills" class="page-content hidden">
+                <div class="page-title">
+                    <h2>จัดการบิลค่าใช้จ่าย</h2>
+                    <p>เพิ่ม/แก้ไข/ลบบิลค่าใช้จ่ายสำหรับผู้อยู่อาศัย</p>
+                </div>
+
+                <div class="card">
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3 class="card-title">เพิ่มบิลค่าใช้จ่ายใหม่</h3>
+                        <button class="btn btn-primary" onclick="showAddBillModal()">
+                            <i class="fas fa-plus"></i> เพิ่มบิล
+                        </button>
+                    </div>
+                    <div class="table-container" style="padding: 20px;">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>รายการ</th>
+                                    <th>สำหรับผู้ใช้</th>
+                                    <th>ยอดเงิน (บาท)</th>
+                                    <th>กำหนดชำระ</th>
+                                    <th>สถานะ</th>
+                                    <th>การดำเนินการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="manageBillsTable">
+                                <!-- Bills will be dynamically loaded here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <!-- END NEW PAGE -->
+
+            <div id="reports" class="page-content hidden">
+                <div class="page-title">
+                    <h2>รายงาน</h2>
+                    <p>สรุปและวิเคราะห์ข้อมูลการจัดการหมู่บ้าน</p>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-icon blue">
+                            <i class="fas fa-chart-line"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3>95%</h3>
+                            <p>อัตราการชำระเงิน</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon green">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3>2.5 วัน</h3>
+                            <p>เวลาเฉลี่ยแก้ไขปัญหา</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon orange">
+                            <i class="fas fa-star"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3>4.8/5</h3>
+                            <p>คะแนนความพึงพอใจ</p>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-icon red">
+                            <i class="fas fa-calendar-check"></i>
+                        </div>
+                        <div class="stat-info">
+                            <h3>85%</h3>
+                            <p>อัตราการใช้สิ่งอำนวยความสะดวก</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">สรุปรายเดือน</h3>
+                    </div>
+                    <div style="padding: 20px 30px;">
+                        <canvas id="monthlyChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal for adding/editing announcements -->
+    <div id="announcementModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="announcementModalTitle">เพิ่มประกาศใหม่</h3>
+                <button class="modal-close" onclick="closeModal('announcementModal')">&times;</button>
+            </div>
+            <form id="announcementForm">
+                <input type="hidden" id="announcementId">
+                <div class="form-group">
+                    <label for="announcementTitle">หัวข้อประกาศ</label>
+                    <input type="text" class="form-control" id="announcementTitle" required>
+                </div>
+                <div class="form-group">
+                    <label for="announcementContent">รายละเอียด</label>
+                    <textarea class="form-control" id="announcementContent" rows="5" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="announcementDate">วันที่ประกาศ</label>
+                    <input type="date" class="form-control" id="announcementDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="announcementAuthor">ผู้ประกาศ</label>
+                    <input type="text" class="form-control" id="announcementAuthor" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="announcementTag">แท็ก (เช่น สำคัญ, กิจกรรม, แจ้งเตือน)</label>
+                    <input type="text" class="form-control" id="announcementTag">
+                </div>
+                <button type="submit" class="btn btn-primary">บันทึกประกาศ</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="paymentModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">ชำระเงิน</h3>
+                <button class="modal-close" onclick="closeModal('paymentModal')">&times;</button>
+            </div>
+            <form id="paymentForm">
+                <input type="hidden" id="paymentBillId"> <!-- Hidden input to store bill ID -->
+                <div class="form-group">
+                    <label for="paymentAmount">จำนวนเงิน</label>
+                    <input type="text" class="form-control" id="paymentAmount" readonly>
+                </div>
+                <div class="form-group">
+                    <label for="paymentMethod">วิธีการชำระ</label>
+                    <select class="form-control" id="paymentMethod" required>
+                     <option value="">เลือกวิธีการชำระ</option>
+                     <option value="bank_transfer">โอนเงินผ่านธนาคาร</option>
+                     <option value="credit_card">บัตรเครดิต</option>
+                     <option value="promptpay">พร้อมเพย์</option>
+                    </select>
+                </div>
+                <div id="qrCodeContainer" style="display:none; margin-top: 20px; text-align: center;">
+                    <h4>สแกน QR Code เพื่อชำระเงิน</h4>
+                    <img src="https://placehold.co/300x300/E0E0E0/000000?text=QR+Code" alt="PromptPay QR Code" style="max-width: 300px; border-radius: 10px;">
+                </div>
+                <div id="bankDetails" class="form-group hidden">
+                    <label>ข้อมูลบัญชีธนาคาร</label>
+                    <div style="background: #f8f9fa; padding: 15px; border-radius: 8px;">
+                        <p><strong>ธนาคารกสิกรไทย</strong></p>
+                        <p>SMART VILLAGE</p>
+                        <p>เลขบัญชี: 139-1-56465-1</p>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="paymentSlip">หลักฐานการโอนเงิน</label>
+                    <div class="file-upload" onclick="document.getElementById('paymentSlipFile').click()">
+                        <i class="fas fa-receipt"></i>
+                        <p>อัปโหลดสลิป<br><small>รองรับ JPG, PNG</small></p>
+                        <input type="file" id="paymentSlipFile" style="display: none;" accept=".jpg,.png">
+                    </div>
+                    <div id="paymentSlipPreview" style="margin-top: 10px;"></div>
+                </div>
+                <button type="submit" class="btn btn-primary">ยืนยันการชำระ</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- NEW MODAL: Manage Bills -->
+    <div id="manageBillModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="billModalTitle">เพิ่มบิลค่าใช้จ่ายใหม่</h3>
+                <button class="modal-close" onclick="closeModal('manageBillModal')">&times;</button>
+            </div>
+            <form id="billForm">
+                <input type="hidden" id="billId">
+                <div class="form-group">
+                    <label for="billItemName">รายการค่าใช้จ่าย</label>
+                    <input type="text" class="form-control" id="billItemName" required>
+                </div>
+                <div class="form-group">
+                    <label for="billAmount">ยอดเงิน (บาท)</label>
+                    <input type="number" step="0.01" class="form-control" id="billAmount" required>
+                </div>
+                <div class="form-group">
+                    <label for="billDueDate">กำหนดชำระ</label>
+                    <input type="date" class="form-control" id="billDueDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="billRecipient">สำหรับผู้อยู่อาศัย</label>
+                    <select class="form-control" id="billRecipient">
+                        <option value="all">ทุกคนในหมู่บ้าน</option>
+                        <!-- Options for individual users will be loaded dynamically -->
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">บันทึกบิล</button>
+            </form>
+        </div>
+    </div>
+    <!-- END NEW MODAL -->
+
+    <!-- NEW MODAL: Add/Edit User -->
+    <div id="userModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" id="userModalTitle">เพิ่มผู้ใช้ใหม่</h3>
+                <button class="modal-close" onclick="closeModal('userModal')">&times;</button>
+            </div>
+            <form id="userForm">
+                <input type="hidden" id="userId">
+                <div class="form-group">
+                    <label for="userName">ชื่อ-นามสกุล</label>
+                    <input type="text" class="form-control" id="userName" required>
+                </div>
+                <div class="form-group">
+                    <label for="userUsername">ชื่อผู้ใช้</label>
+                    <input type="text" class="form-control" id="userUsername" required>
+                </div>
+                <div class="form-group">
+                    <label for="userPassword">รหัสผ่าน</label>
+                    <input type="password" class="form-control" id="userPassword" required>
+                </div>
+                <div class="form-group">
+                    <label for="userPhone">เบอร์ติดต่อ</label>
+                    <input type="tel" class="form-control" id="userPhone">
+                </div>
+                <div class="form-group">
+                    <label for="userAddress">ที่อยู่ (บ้านเลขที่)</label>
+                    <input type="text" class="form-control" id="userAddress">
+                </div>
+                <div class="form-group">
+                    <label for="userRoleSelect">บทบาท</label>
+                    <select class="form-control" id="userRoleSelect" required>
+                        <option value="resident">ผู้อยู่อาศัย</option>
+                        <option value="admin">ผู้ดูแลระบบ</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="userStatusSelect">สถานะ</label>
+                    <select class="form-control" id="userStatusSelect" required>
+                        <option value="pending">รอการอนุมัติ</option>
+                        <option value="approved">อนุมัติ</option>
+                        <option value="suspended">ระงับ</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary">บันทึกผู้ใช้</button>
+            </form>
+        </div>
+    </div>
+    <!-- END NEW MODAL -->
+
+
+    <div id="viewRepairModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">รายละเอียดงานซ่อม</h3>
+                <button class="modal-close" onclick="closeModal('viewRepairModal')">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 20px;">
+                <p><strong>รหัส:</strong> <span id="modalRepairId"></span></p>
+                <p><strong>ผู้แจ้ง:</strong> <span id="modalRepairReporter"></span></p>
+                <p><strong>หัวข้อ:</strong> <span id="modalRepairTitle"></span></p>
+                <p><strong>หมวดหมู่:</strong> <span id="modalRepairCategory"></span></p>
+                <p><strong>วันที่แจ้ง:</strong> <span id="modalRepairDate"></span></p>
+                <p><strong>รายละเอียด:</strong> <span id="modalRepairDescription"></span></p>
+                <p><strong>สถานะ:</strong> <span id="modalRepairStatus" class="status-badge"></span></p>
+                <div id="modalRepairImages" style="margin-top: 15px;">
+                    <strong>รูปภาพ:</strong>
+                    <div id="modalRepairImageContainer" style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: 5px;">
+                        <!-- Images will be loaded here -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding: 15px 20px; text-align: right;">
+                <button class="btn btn-secondary" onclick="closeModal('viewRepairModal')">ปิด</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="messageModal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <div class="modal-header">
+                <h3 class="modal-title" id="messageModalTitle"></h3>
+                <button class="modal-close" onclick="closeModal('messageModal')">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 20px; text-align: center;">
+                <p id="messageModalContent"></p>
+            </div>
+            <div class="modal-footer" style="padding: 15px 20px; text-align: center;">
+                <button class="btn btn-primary" onclick="closeModal('messageModal')">ตกลง</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script src="script.js"></script>
+</body>
+</html>

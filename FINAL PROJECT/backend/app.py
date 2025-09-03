@@ -1,1075 +1,1647 @@
-# app.py
+import os
+import uuid
+from datetime import datetime, date, timedelta
+import json
+
 from flask import Flask, request, jsonify, send_from_directory
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room, leave_room
-from datetime import datetime, date, time
-import bcrypt
-import os
-from dotenv import load_dotenv
+from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
-load_dotenv()
+# --- Configuration ---
+DATABASE_FILE = 'smart_village.db'
+UPLOAD_FOLDER = 'static/uploads'
 
-class Config:
-    """
-    Configuration class for the Flask application.
-    Uses environment variables for sensitive data.
-    """
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'postgresql://your_username:your_password@localhost:5432/smart_village')
-    SQLALCHEMY_TRACK_MODIFICATIONS = False
-    SECRET_KEY = os.environ.get('SECRET_KEY', 'development_secret_key')
-    UPLOAD_FOLDER = 'uploads' # New: Folder for file uploads
-    MAX_CONTENT_LENGTH = 16 * 1024 * 1024 # 16 MB max upload size
+app = Flask(__name__, static_folder='static')
+CORS(app) # Enable CORS for all routes
 
-class SmartVillageApp:
-    """
-    Main application class for the Smart Village backend,
-    encapsulating Flask app, SQLAlchemy, and SocketIO.
-    """
-    def __init__(self):
-        self.app = Flask(__name__)
-        self.app.config.from_object(Config)
-        CORS(self.app, resources={r"/*": {"origins": "*"}})
-        self.db = SQLAlchemy(self.app)
-        self.socketio = SocketIO(self.app, cors_allowed_origins="*", async_mode='threading')
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DATABASE_FILE}'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# Ensure the upload folder exists
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
+
+db = SQLAlchemy(app)
+socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading') # Use threading for simplicity
+
+# --- Models ---
+class User(db.Model):
+    __tablename__ = 'users'
+    user_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = db.Column(db.String(100), nullable=False)
+    username = db.Column(db.String(50), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    phone = db.Column(db.String(20))
+    address = db.Column(db.String(255))
+    role = db.Column(db.String(20), default='resident') # 'resident', 'admin'
+    status = db.Column(db.String(20), default='pending') # 'pending', 'approved', 'suspended'
+    created_at = db.Column(db.DateTime, default=datetime.now)
+    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+    # Relationships (defined here for backref, actual relationships are in other models)
+    # announcements = db.relationship('Announcement', backref='author', lazy=True)
+    # repair_requests = db.relationship('RepairRequest', backref='requester', lazy=True)
+    # booking_requests = db.relationship('BookingRequest', backref='booker', lazy=True)
+    # payments = db.relationship('Payment', backref='payer', lazy=True)
+    # documents = db.relationship('Document', backref='uploader', lazy=True)
+    # security_visitors = db.relationship('SecurityVisitor', backref='host_user', lazy=True)
+    # security_incidents = db.relationship('SecurityIncident', backref='reporter', lazy=True)
+    # voting_polls = db.relationship('VotingPoll', backref='creator', lazy=True)
+    # bills_issued = db.relationship('Bill', backref='issuer', lazy=True)
+
+    def to_dict(self):
+        return {
+            'user_id': self.user_id,
+            'name': self.name,
+            'username': self.username,
+            'phone': self.phone,
+            'address': self.address,
+            'role': self.role,
+            'status': self.status,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat()
+        }
+
+class Announcement(db.Model):
+    __tablename__ = 'announcements'
+    announcement_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = db.Column(db.String(255), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    published_date = db.Column(db.DateTime, default=datetime.now)
+    author_id = db.Column(db.String(36), db.ForeignKey('users.user_id'))
+    tag = db.Column(db.String(50)) # e.g., 'สำคัญ', 'กิจกรรม', 'แจ้งเตือน'
+    tag_color = db.Column(db.String(20)) # e.g., '#667eea'
+    tag_bg = db.Column(db.String(20)) # e.g., '#e3f2fd'
+
+    author = db.relationship('User', backref='announcements_authored') # Define relationship here
+
+    def to_dict(self):
+        return {
+            'announcement_id': self.announcement_id,
+            'title': self.title,
+            'content': self.content,
+            'published_date': self.published_date.isoformat(),
+            'author_id': self.author_id,
+            'author_name': self.author.name if self.author else None,
+            'tag': self.tag,
+            'tag_color': self.tag_color,
+            'tag_bg': self.tag_bg
+        }
+
+class RepairRequest(db.Model):
+    __tablename__ = 'repair_requests'
+    request_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.String(36), db.ForeignKey('users.user_id'), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    category = db.Column(db.String(100)) # e.g., 'ไฟฟ้า', 'น้ำประปา', 'แอร์'
+    description = db.Column(db.Text)
+    submitted_date = db.Column(db.DateTime, default=datetime.now)
+    status = db.Column(db.String(50), default='pending') # 'pending', 'in_progress', 'completed', 'rejected'
+    image_paths = db.Column(db.Text) # JSON string of image file paths
+
+    requester = db.relationship('User', backref='repair_requests_made') # Define relationship here
+
+    def to_dict(self):
+        return {
+            'request_id': self.request_id,
+            'user_id': self.user_id,
+            'user_name': self.requester.name if self.requester else None,
+            'title': self.title,
+            'category': self.category,
+            'description': self.description,
+            'submitted_date': self.submitted_date.isoformat(),
+            'status': self.status,
+            'image_paths': self.image_paths
+        }
+
+class BookingRequest(db.Model):
+    __tablename__ = 'booking_requests'
+    booking_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.String(36), db.ForeignKey('users.user_id'), nullable=False)
+    location = db.Column(db.String(100), nullable=False) # e.g., 'สนามกีฬา', 'คลับเฮ้าส์'
+    date = db.Column(db.Date, nullable=False)
+    start_time = db.Column(db.String(10), nullable=False) # HH:MM
+    end_time = db.Column(db.String(10), nullable=False) # HH:MM
+    purpose = db.Column(db.Text)
+    attendee_count = db.Column(db.Integer)
+    status = db.Column(db.String(50), default='pending') # 'pending', 'approved', 'rejected'
+    requested_at = db.Column(db.DateTime, default=datetime.now)
+
+    booker = db.relationship('User', backref='booking_requests_made') # Define relationship here
+
+    def to_dict(self):
+        return {
+            'booking_id': self.booking_id,
+            'user_id': self.user_id,
+            'user_name': self.booker.name if self.booker else None,
+            'location': self.location,
+            'date': self.date.isoformat(),
+            'start_time': self.start_time,
+            'end_time': self.end_time,
+            'purpose': self.purpose,
+            'attendee_count': self.attendee_count,
+            'status': self.status,
+            'requested_at': self.requested_at.isoformat()
+        }
+
+class Bill(db.Model):
+    __tablename__ = 'bills'
+    bill_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    item_name = db.Column(db.String(255), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    due_date = db.Column(db.Date, nullable=False)
+    recipient_id = db.Column(db.String(36), nullable=False) # 'all' or user_id
+    issued_by_user_id = db.Column(db.String(36), db.ForeignKey('users.user_id'))
+    issued_date = db.Column(db.DateTime, default=datetime.now)
+    status = db.Column(db.String(50), default='unpaid') # 'unpaid', 'paid', 'pending_verification'
+
+    issuer = db.relationship('User', backref='bills_issued_by_me') # Define relationship here
+    # Relationship to Payment is defined in Payment model
+
+    def to_dict(self):
+        return {
+            'bill_id': self.bill_id,
+            'item_name': self.item_name,
+            'amount': self.amount,
+            'due_date': self.due_date.isoformat(),
+            'recipient_id': self.recipient_id,
+            'issued_by_user_id': self.issued_by_user_id,
+            'issued_by_user_name': self.issuer.name if self.issuer else None,
+            'issued_date': self.issued_date.isoformat(),
+            'status': self.status
+        }
+
+class Payment(db.Model):
+    __tablename__ = 'payments'
+    payment_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    bill_id = db.Column(db.String(36), db.ForeignKey('bills.bill_id'), nullable=False)
+    user_id = db.Column(db.String(36), db.ForeignKey('users.user_id'), nullable=False)
+    amount = db.Column(db.Float, nullable=False)
+    payment_date = db.Column(db.DateTime, default=datetime.now)
+    payment_method = db.Column(db.String(50)) # 'bank_transfer', 'credit_card', 'promptpay'
+    status = db.Column(db.String(50), default='pending') # 'pending', 'paid', 'failed'
+    slip_path = db.Column(db.String(255)) # Path to uploaded slip image
+
+    bill = db.relationship('Bill', backref='payments_for_bill') # Define relationship here
+    payer = db.relationship('User', backref='payments_made') # Define relationship here
+
+    def to_dict(self):
+        return {
+            'payment_id': self.payment_id,
+            'bill_id': self.bill_id,
+            'item_name': self.bill.item_name if self.bill else None,
+            'user_id': self.user_id,
+            'user_name': self.payer.name if self.payer else None,
+            'amount': self.amount,
+            'payment_date': self.payment_date.isoformat(),
+            'payment_method': self.payment_method,
+            'status': self.status,
+            'slip_path': self.slip_path
+        }
+
+class Document(db.Model):
+    __tablename__ = 'documents'
+    document_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    document_name = db.Column(db.String(255), nullable=False)
+    file_path = db.Column(db.String(255), nullable=False)
+    uploaded_by_user_id = db.Column(db.String(36), db.ForeignKey('users.user_id'))
+    upload_date = db.Column(db.DateTime, default=datetime.now)
+    category = db.Column(db.String(100)) # 'personal', 'contract', 'receipt', 'public'
+    file_size = db.Column(db.String(50)) # e.g., '2.5 MB'
+
+    uploader = db.relationship('User', backref='documents_uploaded') # Define relationship here
+
+    def to_dict(self):
+        return {
+            'document_id': self.document_id,
+            'document_name': self.document_name,
+            'file_path': self.file_path,
+            'uploaded_by_user_id': self.uploaded_by_user_id,
+            'uploaded_by_user_name': self.uploader.name if self.uploader else None,
+            'upload_date': self.upload_date.isoformat(),
+            'category': self.category,
+            'file_size': self.file_size
+        }
+
+class SecurityVisitor(db.Model):
+    __tablename__ = 'security_visitors'
+    visitor_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.String(36), db.ForeignKey('users.user_id'), nullable=False) # The resident who registered the visitor
+    name = db.Column(db.String(100), nullable=False)
+    phone = db.Column(db.String(20))
+    visit_date = db.Column(db.Date, nullable=False)
+    visit_time = db.Column(db.String(10)) # HH:MM
+    purpose = db.Column(db.Text)
+    registered_at = db.Column(db.DateTime, default=datetime.now)
+
+    host_user = db.relationship('User', backref='visitors_registered') # Define relationship here
+
+    def to_dict(self):
+        return {
+            'visitor_id': self.visitor_id,
+            'user_id': self.user_id,
+            'user_name': self.host_user.name if self.host_user else None,
+            'name': self.name,
+            'phone': self.phone,
+            'visit_date': self.visit_date.isoformat(),
+            'visit_time': self.visit_time,
+            'purpose': self.purpose,
+            'registered_at': self.registered_at.isoformat()
+        }
+
+class SecurityIncident(db.Model):
+    __tablename__ = 'security_incidents'
+    incident_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.String(36), db.ForeignKey('users.user_id'), nullable=False) # The resident who reported the incident
+    description = db.Column(db.Text, nullable=False)
+    reported_date = db.Column(db.DateTime, default=datetime.now)
+    evidence_paths = db.Column(db.Text) # JSON string of file paths (images/videos)
+    status = db.Column(db.String(50), default='reported') # 'reported', 'investigating', 'resolved'
+
+    reporter = db.relationship('User', backref='incidents_reported') # Define relationship here
+
+    def to_dict(self):
+        return {
+            'incident_id': self.incident_id,
+            'user_id': self.user_id,
+            'user_name': self.reporter.name if self.reporter else None,
+            'description': self.description,
+            'reported_date': self.reported_date.isoformat(),
+            'evidence_paths': self.evidence_paths,
+            'status': self.status
+        }
+
+class VotingPoll(db.Model):
+    __tablename__ = 'voting_polls'
+    poll_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text)
+    start_date = db.Column(db.DateTime, default=datetime.now)
+    end_date = db.Column(db.DateTime, nullable=False)
+    created_by_user_id = db.Column(db.String(36), db.ForeignKey('users.user_id'))
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+    creator = db.relationship('User', backref='polls_created') # Define relationship here
+    options = db.relationship('VotingOption', backref='poll', lazy=True, cascade="all, delete-orphan")
+    results = db.relationship('VotingResult', backref='poll', lazy=True, cascade="all, delete-orphan")
+
+    def to_dict(self):
+        total_votes = sum(option.vote_count for option in self.options)
+        return {
+            'poll_id': self.poll_id,
+            'title': self.title,
+            'description': self.description,
+            'start_date': self.start_date.isoformat(),
+            'end_date': self.end_date.isoformat(),
+            'created_by_user_id': self.created_by_user_id,
+            'created_by_user_name': self.creator.name if self.creator else None,
+            'created_at': self.created_at.isoformat(),
+            'options': [option.to_dict() for option in self.options],
+            'total_votes': total_votes
+        }
+
+class VotingOption(db.Model):
+    __tablename__ = 'voting_options'
+    option_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    poll_id = db.Column(db.String(36), db.ForeignKey('voting_polls.poll_id'), nullable=False)
+    option_text = db.Column(db.String(255), nullable=False)
+    vote_count = db.Column(db.Integer, default=0)
+
+    def to_dict(self):
+        return {
+            'option_id': self.option_id,
+            'poll_id': self.poll_id,
+            'option_text': self.option_text,
+            'vote_count': self.vote_count
+        }
+
+class VotingResult(db.Model):
+    __tablename__ = 'voting_results'
+    result_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    poll_id = db.Column(db.String(36), db.ForeignKey('voting_polls.poll_id'), nullable=False)
+    option_id = db.Column(db.String(36), db.ForeignKey('voting_options.option_id'), nullable=False)
+    user_id = db.Column(db.String(36), db.ForeignKey('users.user_id'), nullable=False)
+    voted_at = db.Column(db.DateTime, default=datetime.now)
+
+    # Ensure a user can only vote once per poll
+    __table_args__ = (db.UniqueConstraint('poll_id', 'user_id', name='_user_poll_uc'),)
+
+    def to_dict(self):
+        return {
+            'result_id': self.result_id,
+            'poll_id': self.poll_id,
+            'option_id': self.option_id,
+            'user_id': self.user_id,
+            'voted_at': self.voted_at.isoformat()
+        }
+
+class ChatMessage(db.Model):
+    __tablename__ = 'chat_messages'
+    message_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    sender_id = db.Column(db.String(36), db.ForeignKey('users.user_id'), nullable=False)
+    room_name = db.Column(db.String(100), nullable=False) # e.g., 'general_chat', 'admins', 'user_id_to_user_id'
+    content = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.now)
+
+    sender = db.relationship('User', backref='sent_messages') # Define relationship here
+
+    def to_dict(self):
+        return {
+            'message_id': self.message_id,
+            'sender_id': self.sender_id,
+            'sender_name': self.sender.name if self.sender else None,
+            'sender_avatar': self.sender.name[0].upper() if self.sender and self.sender.name else 'U',
+            'room_name': self.room_name,
+            'content': self.content,
+            'timestamp': self.timestamp.isoformat()
+        }
+
+class CalendarEvent(db.Model):
+    __tablename__ = 'calendar_events'
+    event_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    event_name = db.Column(db.String(255), nullable=False)
+    event_date = db.Column(db.Date, nullable=False)
+    start_time = db.Column(db.String(10)) # HH:MM
+    end_time = db.Column(db.String(10)) # HH:MM
+    location = db.Column(db.String(255))
+    description = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.now)
+
+    def to_dict(self):
+        return {
+            'event_id': self.event_id,
+            'event_name': self.event_name,
+            'event_date': self.event_date.isoformat(),
+            'start_time': self.start_time,
+            'end_time': self.end_time,
+            'location': self.location,
+            'description': self.description,
+            'created_at': self.created_at.isoformat()
+        }
+
+# --- Database Initialization and Population ---
+def populate_initial_data():
+    """Populates the database with some initial data."""
+    print("Database is empty. Populating with initial data...")
+    try:
+        # Create a default admin user
+        admin_user = User(
+            user_id=str(uuid.uuid4()),
+            name='Admin User',
+            username='admin',
+            password_hash=generate_password_hash('admin123'),
+            phone='0987654321',
+            address='Admin House 1',
+            role='admin',
+            status='approved'
+        )
+        db.session.add(admin_user)
+
+        # Create a default resident user
+        resident_user = User(
+            user_id=str(uuid.uuid4()),
+            name='Resident User',
+            username='resident',
+            password_hash=generate_password_hash('resident123'),
+            phone='0812345678',
+            address='House A-101',
+            role='resident',
+            status='approved'
+        )
+        db.session.add(resident_user)
+
+        # Create a pending resident user
+        pending_user = User(
+            user_id=str(uuid.uuid4()),
+            name='Pending User',
+            username='pending',
+            password_hash=generate_password_hash('pending123'),
+            phone='0801112222',
+            address='House B-202',
+            role='resident',
+            status='pending'
+        )
+        db.session.add(pending_user)
+
+        db.session.flush() # Ensure user IDs are available for foreign keys
+
+        # Announcements
+        announcement1 = Announcement(
+            announcement_id=str(uuid.uuid4()),
+            title='ประชุมคณะกรรมการประจำเดือน',
+            content='เรียนเชิญสมาชิกทุกท่านเข้าร่วมประชุมคณะกรรมการประจำเดือน พฤศจิกายน 2567 ในวันที่ 15 พฤศจิกายน 2567 เวลา 19:00 น. ณ ห้องประชุมอาคาร A',
+            published_date=datetime.now() - timedelta(days=5),
+            author_id=admin_user.user_id,
+            tag='สำคัญ',
+            tag_color='#1976d2',
+            tag_bg='#e3f2fd'
+        )
+        announcement2 = Announcement(
+            announcement_id=str(uuid.uuid4()),
+            title='กิจกรรมทำความสะอาดหมู่บ้าน',
+            content='ขอเชิญชวนสมาชิกทุกครอบครัวร่วมกิจกรรมทำความสะอาดหมู่บ้าน ในวันเสาร์ที่ 18 พฤศจิกายน 2567 เวลา 08:00-12:00 น. จุดนัดพบ: ลานจอดรถกลาง',
+            published_date=datetime.now() - timedelta(days=7),
+            author_id=admin_user.user_id,
+            tag='กิจกรรม',
+            tag_color='#2e7d32',
+            tag_bg='#e8f5e8'
+        )
+        db.session.add_all([announcement1, announcement2])
+
+        # Repair Requests
+        repair1 = RepairRequest(
+            request_id=str(uuid.uuid4()),
+            user_id=resident_user.user_id,
+            title='ไฟทางเดินเสีย',
+            category='ไฟฟ้า',
+            description='ไฟทางเดินหน้าบ้านเลขที่ A-101 เสีย ไม่ติดมา 2 วันแล้ว',
+            submitted_date=datetime.now() - timedelta(days=3),
+            status='pending'
+        )
+        repair2 = RepairRequest(
+            request_id=str(uuid.uuid4()),
+            user_id=resident_user.user_id,
+            title='น้ำรั่วซึม',
+            category='น้ำประปา',
+            description='ท่อน้ำประปาหน้าบ้านเลขที่ A-101 มีน้ำรั่วซึมเล็กน้อย',
+            submitted_date=datetime.now() - timedelta(days=7),
+            status='in_progress'
+        )
+        db.session.add_all([repair1, repair2])
+
+        # Booking Requests
+        booking1 = BookingRequest(
+            booking_id=str(uuid.uuid4()),
+            user_id=resident_user.user_id,
+            location='สนามกีฬา',
+            date=datetime.now().date() + timedelta(days=5),
+            start_time='14:00',
+            end_time='16:00',
+            purpose='เล่นฟุตบอล',
+            attendee_count=10,
+            status='approved'
+        )
+        booking2 = BookingRequest(
+            booking_id=str(uuid.uuid4()),
+            user_id=resident_user.user_id,
+            location='คลับเฮ้าส์',
+            date=datetime.now().date() + timedelta(days=12),
+            start_time='18:00',
+            end_time='22:00',
+            purpose='จัดงานวันเกิด',
+            attendee_count=25,
+            status='pending'
+        )
+        db.session.add_all([booking1, booking2])
+
+        # Bills
+        bill1 = Bill(
+            bill_id=str(uuid.uuid4()),
+            item_name='ค่าส่วนกลาง เดือน พ.ย. 67',
+            amount=1500.00,
+            due_date=datetime.now().date() + timedelta(days=30),
+            recipient_id='all',
+            issued_by_user_id=admin_user.user_id,
+            status='unpaid'
+        )
+        bill2 = Bill(
+            bill_id=str(uuid.uuid4()),
+            item_name='ค่าจอดรถเพิ่มเติม',
+            amount=300.00,
+            due_date=datetime.now().date() + timedelta(days=15),
+            recipient_id=resident_user.user_id,
+            issued_by_user_id=admin_user.user_id,
+            status='unpaid'
+        )
+        bill3 = Bill(
+            bill_id=str(uuid.uuid4()),
+            item_name='ค่าส่วนกลาง เดือน ต.ค. 67',
+            amount=1500.00,
+            due_date=datetime.now().date() - timedelta(days=10),
+            recipient_id='all',
+            issued_by_user_id=admin_user.user_id,
+            status='paid'
+        )
+        db.session.add_all([bill1, bill2, bill3])
+        db.session.flush() # Ensure bill IDs are available
+
+        # Payments (for bill3)
+        payment1 = Payment(
+            payment_id=str(uuid.uuid4()),
+            bill_id=bill3.bill_id,
+            user_id=resident_user.user_id,
+            amount=1500.00,
+            payment_date=datetime.now() - timedelta(days=15),
+            payment_method='bank_transfer',
+            status='paid',
+            slip_path='slip_oct_resident.jpg'
+        )
+        db.session.add(payment1)
+
+        # Documents
+        doc1 = Document(
+            document_id=str(uuid.uuid4()),
+            document_name='สำเนาบัตรประชาชน',
+            file_path='id_card_resident.pdf',
+            uploaded_by_user_id=resident_user.user_id,
+            upload_date=datetime.now() - timedelta(days=20),
+            category='personal',
+            file_size='2.5 MB'
+        )
+        doc2 = Document(
+            document_id=str(uuid.uuid4()),
+            document_name='ใบเสร็จค่าส่วนกลาง ต.ค. 67',
+            file_path='receipt_oct_resident.pdf',
+            uploaded_by_user_id=resident_user.user_id,
+            upload_date=datetime.now() - timedelta(days=15),
+            category='receipt',
+            file_size='1.2 MB'
+        )
+        db.session.add_all([doc1, doc2])
+
+        # Security Visitors
+        visitor1 = SecurityVisitor(
+            visitor_id=str(uuid.uuid4()),
+            user_id=resident_user.user_id,
+            name='สมศักดิ์ มาดี',
+            phone='0901234567',
+            visit_date=datetime.now().date() + timedelta(days=1),
+            visit_time='10:00',
+            purpose='มาเยี่ยมญาติ'
+        )
+        db.session.add(visitor1)
+
+        # Security Incidents
+        incident1 = SecurityIncident(
+            incident_id=str(uuid.uuid4()),
+            user_id=resident_user.user_id,
+            description='ประเภท: เสียงรบกวน, สถานที่: บ้านเลขที่ A-102, รายละเอียด: มีเสียงดังจากการก่อสร้างนอกเวลาที่กำหนด',
+            reported_date=datetime.now() - timedelta(days=2),
+            evidence_paths=json.dumps(["noise_incident.mp4"])
+        )
+        db.session.add(incident1)
+
+        # Voting Polls
+        poll1 = VotingPoll(
+            poll_id=str(uuid.uuid4()),
+            title='เลือกสีทาสนามเด็กเล่นใหม่',
+            description='โปรดเลือกสีที่คุณต้องการสำหรับสนามเด็กเล่นใหม่',
+            start_date=datetime.now() - timedelta(days=10),
+            end_date=datetime.now() + timedelta(days=10),
+            created_by_user_id=admin_user.user_id
+        )
+        db.session.add(poll1)
+        db.session.flush() # Ensure poll1.poll_id is available
+
+        option1_1 = VotingOption(option_id=str(uuid.uuid4()), poll_id=poll1.poll_id, option_text='สีน้ำเงิน', vote_count=12)
+        option1_2 = VotingOption(option_id=str(uuid.uuid4()), poll_id=poll1.poll_id, option_text='สีเขียว', vote_count=18)
+        option1_3 = VotingOption(option_id=str(uuid.uuid4()), poll_id=poll1.poll_id, option_text='สีเหลือง', vote_count=8)
+        db.session.add_all([option1_1, option1_2, option1_3])
+
+        poll2 = VotingPoll(
+            poll_id=str(uuid.uuid4()),
+            title='งบประมาณปรับปรุงสระว่ายน้ำ',
+            description='เห็นด้วยกับการใช้งบประมาณ 500,000 บาทในการปรับปรุงสระว่ายน้ำหรือไม่',
+            start_date=datetime.now() - timedelta(days=5),
+            end_date=datetime.now() + timedelta(days=20),
+            created_by_user_id=admin_user.user_id
+        )
+        db.session.add(poll2)
+        db.session.flush()
+
+        option2_1 = VotingOption(option_id=str(uuid.uuid4()), poll_id=poll2.poll_id, option_text='เห็นด้วย (งบประมาณ 500,000 บาท)', vote_count=25)
+        option2_2 = VotingOption(option_id=str(uuid.uuid4()), poll_id=poll2.poll_id, option_text='ไม่เห็นด้วย', vote_count=8)
+        db.session.add_all([option2_1, option2_2])
+
+        # Calendar Events
+        event1 = CalendarEvent(
+            event_id=str(uuid.uuid4()),
+            event_name='ประชุมคณะกรรมการ',
+            event_date=datetime.now().date() + timedelta(days=10),
+            start_time='19:00',
+            end_time='21:00',
+            location='ห้องประชุมอาคาร A',
+            description='ประชุมประจำเดือนของคณะกรรมการหมู่บ้าน'
+        )
+        event2 = CalendarEvent(
+            event_id=str(uuid.uuid4()),
+            event_name='ทำความสะอาดหมู่บ้าน',
+            event_date=datetime.now().date() + timedelta(days=13),
+            start_time='08:00',
+            end_time='12:00',
+            location='ลานจอดรถกลาง',
+            description='กิจกรรมทำความสะอาดหมู่บ้านประจำปี'
+        )
+        event3 = CalendarEvent(
+            event_id=str(uuid.uuid4()),
+            event_name='งานเลี้ยงสังสรรค์ปีใหม่',
+            event_date=date(datetime.now().year + 1, 1, 1), # Next New Year
+            start_time='18:00',
+            end_time='23:59',
+            location='คลับเฮ้าส์',
+            description='งานเลี้ยงฉลองปีใหม่ของหมู่บ้าน'
+        )
+        db.session.add_all([event1, event2, event3])
+
+        db.session.commit()
+        print("Initial data populated successfully.")
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        print(f"Error populating initial data: {e}")
+    except Exception as e:
+        db.session.rollback()
+        print(f"An unexpected error occurred during data population: {e}")
+
+# --- Routes ---
+
+# Home Route
+@app.route('/')
+def home():
+    return "Smart Village Backend is running!"
+
+# File Uploads Route
+@app.route('/uploads/<filename>')
+def uploaded_file(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+
+# --- Auth Routes ---
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    username = data.get('username')
+    password = data.get('password')
+
+    if not username or not password:
+        return jsonify({'message': 'Username and password are required'}), 400
+
+    user = User.query.filter_by(username=username).first()
+
+    if not user or not check_password_hash(user.password_hash, password):
+        return jsonify({'message': 'Invalid credentials'}), 401
+
+    if user.status != 'approved':
+        return jsonify({'message': f'Your account is {user.status}. Please contact admin.'}), 403
+
+    return jsonify({
+        'message': 'Login successful',
+        'user_id': user.user_id,
+        'name': user.name,
+        'username': user.username,
+        'role': user.role
+    }), 200
+
+# --- User Routes ---
+@app.route('/users', methods=['POST'])
+def create_user():
+    data = request.get_json()
+    name = data.get('name')
+    username = data.get('username')
+    password = data.get('password')
+    phone = data.get('phone')
+    address = data.get('address')
+    role = data.get('role', 'resident') # Default to resident
+    status = data.get('status', 'pending') # Default to pending for new registrations
+
+    if not name or not username or not password:
+        return jsonify({'message': 'Name, username, and password are required'}), 400
+
+    hashed_password = generate_password_hash(password)
+
+    new_user = User(
+        name=name,
+        username=username,
+        password_hash=hashed_password,
+        phone=phone,
+        address=address,
+        role=role,
+        status=status
+    )
+    try:
+        db.session.add(new_user)
+        db.session.commit()
+        return jsonify({'message': 'User created successfully', 'user': new_user.to_dict()}), 201
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'message': 'Username already exists'}), 409
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Error creating user: {str(e)}'}), 500
+
+@app.route('/users', methods=['GET'])
+def get_all_users():
+    users = User.query.all()
+    return jsonify([user.to_dict() for user in users]), 200
+
+@app.route('/users/<user_id>', methods=['GET'])
+def get_user():
+    user_id = request.view_args['user_id']
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+    return jsonify(user.to_dict()), 200
+
+@app.route('/users/<user_id>', methods=['PUT'])
+def update_user():
+    user_id = request.view_args['user_id']
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
+
+    data = request.get_json()
+    
+    if 'password' in data and data['password']:
+        if 'current_password' in data:
+            current_password = data.get('current_password')
+            if not check_password_hash(user.password_hash, current_password):
+                return jsonify({'message': 'Incorrect current password'}), 401
         
-        # Ensure upload folder exists
-        if not os.path.exists(self.app.config['UPLOAD_FOLDER']):
-            os.makedirs(self.app.config['UPLOAD_FOLDER'])
-
-        self._setup_models()
-        self._setup_routes()
-        self._setup_socketio_events()
-
-    def _setup_models(self):
-        """
-        Defines the SQLAlchemy database models.
-        """
-        class Users(self.db.Model):
-            __tablename__ = 'users'
-            user_id = self.db.Column(self.db.Integer, primary_key=True)
-            name = self.db.Column(self.db.String(255), nullable=False)
-            username = self.db.Column(self.db.String(50), unique=True, nullable=False)
-            password_hash = self.db.Column(self.db.String(255), nullable=False)
-            role = self.db.Column(self.db.String(20), nullable=False, default='resident')
-            phone = self.db.Column(self.db.String(20))
-            address = self.db.Column(self.db.Text)
-            email = self.db.Column(self.db.String(255))
-            avatar = self.db.Column(self.db.String(255))
-            status = self.db.Column(self.db.String(50), default='pending') # New: User status
-
-            def set_password(self, password):
-                self.password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-
-            def check_password(self, password):
-                return bcrypt.checkpw(password.encode('utf-8'), self.password_hash.encode('utf-8'))
-
-        class Announcements(self.db.Model):
-            __tablename__ = 'announcements'
-            announcement_id = self.db.Column(self.db.Integer, primary_key=True)
-            title = self.db.Column(self.db.String(255), nullable=False)
-            content = self.db.Column(self.db.Text, nullable=False)
-            published_date = self.db.Column(self.db.DateTime, default=datetime.utcnow)
-            author_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-            tag = self.db.Column(self.db.String(50))
-            tag_color = self.db.Column(self.db.String(20))
-            tag_bg = self.db.Column(self.db.String(20))
-            # Relationship to get author name
-            author = self.db.relationship('Users', backref='announcements_authored', lazy=True)
-
-        class RepairRequests(self.db.Model):
-            __tablename__ = 'repair_requests'
-            request_id = self.db.Column(self.db.Integer, primary_key=True)
-            user_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-            title = self.db.Column(self.db.String(255), nullable=False)
-            category = self.db.Column(self.db.String(50))
-            description = self.db.Column(self.db.Text, nullable=False)
-            submitted_date = self.db.Column(self.db.DateTime, default=datetime.utcnow)
-            status = self.db.Column(self.db.String(50), default='pending')
-            image_paths = self.db.Column(self.db.Text) # Stored as JSON string or comma-separated
-            # Relationship to get user name
-            user = self.db.relationship('Users', backref='repair_requests', lazy=True)
-
-        class BookingRequests(self.db.Model):
-            __tablename__ = 'booking_requests'
-            booking_id = self.db.Column(self.db.Integer, primary_key=True)
-            user_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-            location = self.db.Column(self.db.String(255), nullable=False)
-            date = self.db.Column(self.db.Date)
-            start_time = self.db.Column(self.db.Time)
-            end_time = self.db.Column(self.db.Time)
-            purpose = self.db.Column(self.db.Text)
-            attendee_count = self.db.Column(self.db.Integer)
-            status = self.db.Column(self.db.String(50), default='pending')
-            # Relationship to get user name
-            user = self.db.relationship('Users', backref='booking_requests', lazy=True)
-
-        class Bills(self.db.Model): # New: Bills Model
-            __tablename__ = 'bills'
-            bill_id = self.db.Column(self.db.Integer, primary_key=True)
-            item_name = self.db.Column(self.db.String(255), nullable=False)
-            amount = self.db.Column(self.db.Numeric(10, 2), nullable=False)
-            due_date = self.db.Column(self.db.Date)
-            recipient_id = self.db.Column(self.db.String(50), nullable=False) # 'all' or user_id
-            issued_by_user_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-            status = self.db.Column(self.db.String(50), default='unpaid') # unpaid, paid, pending_verification
-            issued_by = self.db.relationship('Users', backref='bills_issued', lazy=True)
-
-        class Payments(self.db.Model):
-            __tablename__ = 'payments'
-            payment_id = self.db.Column(self.db.Integer, primary_key=True)
-            user_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-            bill_id = self.db.Column(self.db.Integer, self.db.ForeignKey('bills.bill_id'), nullable=True) # New: Link to Bills
-            amount = self.db.Column(self.db.Numeric(10, 2), nullable=False)
-            payment_method = self.db.Column(self.db.String(50))
-            payment_date = self.db.Column(self.db.DateTime, default=datetime.utcnow)
-            status = self.db.Column(self.db.String(50)) # pending, paid, rejected
-            slip_path = self.db.Column(self.db.String(255))
-            # Relationships
-            user = self.db.relationship('Users', backref='payments', lazy=True)
-            bill = self.db.relationship('Bills', backref='payments', lazy=True)
-
-
-        class CalendarEvents(self.db.Model):
-            __tablename__ = 'calendar_events'
-            event_id = self.db.Column(self.db.Integer, primary_key=True)
-            event_name = self.db.Column(self.db.String(255), nullable=False)
-            event_date = self.db.Column(self.db.DateTime)
-            location = self.db.Column(self.db.String(255))
-            description = self.db.Column(self.db.Text)
-
-        class Documents(self.db.Model):
-            __tablename__ = 'documents'
-            document_id = self.db.Column(self.db.Integer, primary_key=True)
-            document_name = self.db.Column(self.db.String(255), nullable=False)
-            file_path = self.db.Column(self.db.String(255), nullable=False)
-            uploaded_by_user_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-            upload_date = self.db.Column(self.db.DateTime, default=datetime.utcnow)
-            category = self.db.Column(self.db.String(50)) # New: Document category
-            uploaded_by = self.db.relationship('Users', backref='documents_uploaded', lazy=True)
-
-        class ChatMessages(self.db.Model):
-            __tablename__ = 'chat_messages'
-            message_id = self.db.Column(self.db.Integer, primary_key=True)
-            sender_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-            receiver_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'), nullable=True)
-            content = self.db.Column(self.db.Text, nullable=False)
-            timestamp = self.db.Column(self.db.DateTime, default=datetime.utcnow)
-            room_name = self.db.Column(self.db.String(100), default='general')
-            sender = self.db.relationship('Users', foreign_keys=[sender_id], backref='sent_messages', lazy=True)
-            receiver = self.db.relationship('Users', foreign_keys=[receiver_id], backref='received_messages', lazy=True)
-
-
-        class SecurityVisitors(self.db.Model):
-            __tablename__ = 'security_visitors'
-            visitor_id = self.db.Column(self.db.Integer, primary_key=True)
-            user_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-            name = self.db.Column(self.db.String(255), nullable=False)
-            phone = self.db.Column(self.db.String(20))
-            visit_date = self.db.Column(self.db.Date)
-            visit_time = self.db.Column(self.db.Time)
-            purpose = self.db.Column(self.db.Text)
-            user = self.db.relationship('Users', backref='visitors_registered', lazy=True)
-
-        class SecurityIncidents(self.db.Model):
-            __tablename__ = 'security_incidents'
-            incident_id = self.db.Column(self.db.Integer, primary_key=True)
-            user_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-            description = self.db.Column(self.db.Text, nullable=False)
-            reported_date = self.db.Column(self.db.DateTime, default=datetime.utcnow)
-            evidence_paths = self.db.Column(self.db.Text)
-            user = self.db.relationship('Users', backref='incidents_reported', lazy=True)
-
-        class VotingPolls(self.db.Model):
-            __tablename__ = 'voting_polls'
-            poll_id = self.db.Column(self.db.Integer, primary_key=True)
-            title = self.db.Column(self.db.String(255), nullable=False)
-            description = self.db.Column(self.db.Text)
-            start_date = self.db.Column(self.db.Date)
-            end_date = self.db.Column(self.db.Date)
-
-        class VotingOptions(self.db.Model):
-            __tablename__ = 'voting_options'
-            option_id = self.db.Column(self.db.Integer, primary_key=True)
-            poll_id = self.db.Column(self.db.Integer, self.db.ForeignKey('voting_polls.poll_id'))
-            option_text = self.db.Column(self.db.String(255), nullable=False)
-
-        class VotingResults(self.db.Model):
-            __tablename__ = 'voting_results'
-            result_id = self.db.Column(self.db.Integer, primary_key=True)
-            poll_id = self.db.Column(self.db.Integer, self.db.ForeignKey('voting_polls.poll_id'))
-            option_id = self.db.Column(self.db.Integer, self.db.ForeignKey('voting_options.option_id'))
-            user_id = self.db.Column(self.db.Integer, self.db.ForeignKey('users.user_id'))
-
-        # Expose models as attributes of the class instance
-        self.Users = Users
-        self.Announcements = Announcements
-        self.RepairRequests = RepairRequests
-        self.BookingRequests = BookingRequests
-        self.Bills = Bills # New
-        self.Payments = Payments
-        self.CalendarEvents = CalendarEvents
-        self.Documents = Documents
-        self.ChatMessages = ChatMessages
-        self.SecurityVisitors = SecurityVisitors
-        self.SecurityIncidents = SecurityIncidents
-        self.VotingPolls = VotingPolls
-        self.VotingOptions = VotingOptions
-        self.VotingResults = VotingResults
-
-    def _setup_routes(self):
-        """
-        Defines the RESTful API routes for the Flask application.
-        """
-        # Serve uploaded files
-        @self.app.route('/uploads/<filename>')
-        def uploaded_file(filename):
-            return send_from_directory(self.app.config['UPLOAD_FOLDER'], filename)
-
-        @self.app.route('/users', methods=['GET', 'POST'])
-        def handle_users():
-            if request.method == 'POST':
-                data = request.json
-                if self.Users.query.filter_by(username=data['username']).first():
-                    return jsonify({"message": "Username already exists"}), 409
-                    
-                new_user = self.Users(
-                    name=data['name'],
-                    username=data['username'],
-                    role=data.get('role', 'resident'),
-                    phone=data.get('phone'),
-                    address=data.get('address'),
-                    email=data.get('email'),
-                    avatar=data.get('avatar', data['name'][0].upper()), # Default avatar from first letter of name
-                    status=data.get('status', 'pending') # New: Set status
-                )
-                new_user.set_password(data['password'])
-                self.db.session.add(new_user)
-                self.db.session.commit()
-                return jsonify({"message": "User registered successfully", "user_id": new_user.user_id}), 201
-            
-            elif request.method == 'GET':
-                users = self.Users.query.all()
-                result = [
-                    {
-                        "user_id": user.user_id,
-                        "name": user.name,
-                        "username": user.username,
-                        "role": user.role,
-                        "phone": user.phone,
-                        "address": user.address,
-                        "email": user.email,
-                        "avatar": user.avatar,
-                        "status": user.status # New: Include status
-                    } for user in users
-                ]
-                return jsonify(result)
-
-        @self.app.route('/users/<int:user_id>', methods=['GET', 'PUT', 'DELETE'])
-        def handle_single_user(user_id):
-            user = self.Users.query.get_or_404(user_id)
-            if request.method == 'GET':
-                return jsonify({
-                    "user_id": user.user_id,
-                    "name": user.name,
-                    "username": user.username,
-                    "role": user.role,
-                    "phone": user.phone,
-                    "address": user.address,
-                    "email": user.email,
-                    "avatar": user.avatar,
-                    "status": user.status # New: Include status
-                })
-            elif request.method == 'PUT':
-                data = request.json
-                user.name = data.get('name', user.name)
-                user.username = data.get('username', user.username)
-                user.role = data.get('role', user.role)
-                user.phone = data.get('phone', user.phone)
-                user.address = data.get('address', user.address)
-                user.email = data.get('email', user.email)
-                user.avatar = data.get('avatar', user.avatar)
-                user.status = data.get('status', user.status) # New: Update status
-                
-                if 'password' in data and data['password']:
-                    user.set_password(data['password'])
-                self.db.session.commit()
-                return jsonify({"message": "User updated successfully"}), 200
-            elif request.method == 'DELETE':
-                self.db.session.delete(user)
-                self.db.session.commit()
-                return jsonify({"message": "User deleted successfully"}), 204
-
-        @self.app.route('/login', methods=['POST'])
-        def login():
-            data = request.json
-            username = data.get('username')
-            password = data.get('password')
-
-            user = self.Users.query.filter_by(username=username).first()
-            if user and user.check_password(password):
-                if user.status == 'pending':
-                    return jsonify({"message": "บัญชีของคุณยังไม่ได้รับการอนุมัติ"}), 403
-                if user.status == 'suspended':
-                    return jsonify({"message": "บัญชีของคุณถูกระงับ"}), 403
-                return jsonify({
-                    "message": "Login successful", 
-                    "user_id": user.user_id, 
-                    "username": user.username,
-                    "name": user.name,
-                    "role": user.role,
-                    "avatar": user.avatar if user.avatar else user.name[0].upper()
-                }), 200
-            return jsonify({"message": "Invalid username or password"}), 401
-
-        @self.app.route('/announcements', methods=['GET', 'POST'])
-        def manage_announcements():
-            if request.method == 'POST':
-                data = request.json
-                tag_colors = {
-                    'สำคัญ': {'color': '#1976d2', 'bg': '#e3f2fd'},
-                    'กิจกรรม': {'color': '#2e7d32', 'bg': '#e8f5e8'},
-                    'แจ้งเตือน': {'color': '#856404', 'bg': '#fff3cd'}
-                }
-                tag_info = tag_colors.get(data.get('tag'), {'color': '#666', 'bg': '#eee'})
-
-                new_announcement = self.Announcements(
-                    title=data['title'],
-                    content=data['content'],
-                    published_date=datetime.fromisoformat(data['published_date']) if 'published_date' in data else datetime.utcnow(),
-                    author_id=data.get('author_id'),
-                    tag=data.get('tag'),
-                    tag_color=tag_info['color'],
-                    tag_bg=tag_info['bg']
-                )
-                self.db.session.add(new_announcement)
-                self.db.session.commit()
-                
-                author_name = new_announcement.author.name if new_announcement.author else 'Unknown Author'
-                self.socketio.emit('new_announcement', {
-                    'announcement_id': new_announcement.announcement_id,
-                    'title': new_announcement.title,
-                    'content': new_announcement.content,
-                    'published_date': new_announcement.published_date.isoformat(),
-                    'author_id': new_announcement.author_id,
-                    'author_name': author_name, # New: Include author name
-                    'tag': new_announcement.tag,
-                    'tag_color': new_announcement.tag_color,
-                    'tag_bg': new_announcement.tag_bg
-                }, broadcast=True)
-
-                return jsonify({"message": "Announcement created successfully", "announcement_id": new_announcement.announcement_id}), 201
-            
-            elif request.method == 'GET':
-                announcements = self.Announcements.query.order_by(self.Announcements.published_date.desc()).all()
-                result = [
-                    {
-                        "announcement_id": ann.announcement_id,
-                        "title": ann.title,
-                        "content": ann.content,
-                        "published_date": ann.published_date.isoformat(),
-                        "author_id": ann.author_id,
-                        "author_name": ann.author.name if ann.author else 'Unknown Author', # New: Include author name
-                        "tag": ann.tag,
-                        "tag_color": ann.tag_color,
-                        "tag_bg": ann.tag_bg
-                    } for ann in announcements
-                ]
-                return jsonify(result)
-
-        @self.app.route('/announcements/<int:announcement_id>', methods=['PUT', 'DELETE'])
-        def handle_single_announcement(announcement_id):
-            announcement = self.Announcements.query.get_or_404(announcement_id)
-            if request.method == 'PUT':
-                data = request.json
-                announcement.title = data.get('title', announcement.title)
-                announcement.content = data.get('content', announcement.content)
-                if 'published_date' in data:
-                    announcement.published_date = datetime.fromisoformat(data['published_date'])
-                announcement.author_id = data.get('author_id', announcement.author_id)
-                announcement.tag = data.get('tag', announcement.tag)
-                
-                tag_colors = {
-                    'สำคัญ': {'color': '#1976d2', 'bg': '#e3f2fd'},
-                    'กิจกรรม': {'color': '#2e7d32', 'bg': '#e8f5e8'},
-                    'แจ้งเตือน': {'color': '#856404', 'bg': '#fff3cd'}
-                }
-                tag_info = tag_colors.get(announcement.tag, {'color': '#666', 'bg': '#eee'})
-                announcement.tag_color = tag_info['color']
-                announcement.tag_bg = tag_info['bg']
-
-                self.db.session.commit()
-                author_name = announcement.author.name if announcement.author else 'Unknown Author'
-                self.socketio.emit('announcement_updated', {
-                    'announcement_id': announcement.announcement_id,
-                    'title': announcement.title,
-                    'content': announcement.content,
-                    'published_date': announcement.published_date.isoformat(),
-                    'author_id': announcement.author_id,
-                    'author_name': author_name, # New: Include author name
-                    'tag': announcement.tag,
-                    'tag_color': announcement.tag_color,
-                    'tag_bg': announcement.tag_bg
-                }, broadcast=True)
-                return jsonify({"message": "Announcement updated successfully"}), 200
-            
-            elif request.method == 'DELETE':
-                self.db.session.delete(announcement)
-                self.db.session.commit()
-                self.socketio.emit('announcement_deleted', {'announcement_id': announcement_id}, broadcast=True)
-                return jsonify({"message": "Announcement deleted successfully"}), 204
-
-        @self.app.route('/repair-requests', methods=['GET', 'POST'])
-        def manage_repair_requests():
-            if request.method == 'POST':
-                data = request.json
-                new_request = self.RepairRequests(
-                    user_id=data['user_id'],
-                    title=data['title'],
-                    category=data['category'],
-                    description=data['description'],
-                    status='pending',
-                    image_paths=data.get('image_paths')
-                )
-                self.db.session.add(new_request)
-                self.db.session.commit()
-                
-                user_name = new_request.user.name if new_request.user else 'Unknown User'
-                self.socketio.emit('new_repair_request', {
-                    'request_id': new_request.request_id,
-                    'user_id': new_request.user_id,
-                    'user_name': user_name, # New: Include user name
-                    'title': new_request.title,
-                    'status': new_request.status,
-                    'submitted_date': new_request.submitted_date.isoformat()
-                }, room='admins')
-                return jsonify({"message": "Repair request submitted successfully", "request_id": new_request.request_id}), 201
-            
-            elif request.method == 'GET':
-                requests = self.RepairRequests.query.all()
-                result = []
-                for req in requests:
-                    user = req.user # Use relationship
-                    result.append({
-                        "request_id": req.request_id,
-                        "user_id": req.user_id,
-                        "user_name": user.name if user else "Unknown User",
-                        "title": req.title,
-                        "category": req.category,
-                        "description": req.description,
-                        "status": req.status,
-                        "submitted_date": req.submitted_date.isoformat(),
-                        "image_paths": req.image_paths
-                    })
-                return jsonify(result)
-
-        @self.app.route('/repair-requests/<int:request_id>', methods=['PUT', 'DELETE'])
-        def handle_single_repair_request(request_id):
-            req = self.RepairRequests.query.get_or_404(request_id)
-            if request.method == 'PUT':
-                data = request.json
-                req.title = data.get('title', req.title)
-                req.category = data.get('category', req.category)
-                req.description = data.get('description', req.description)
-                req.status = data.get('status', req.status)
-                req.image_paths = data.get('image_paths', req.image_paths)
-                self.db.session.commit()
-                
-                self.socketio.emit('repair_status_updated', {
-                    'request_id': req.request_id,
-                    'user_id': req.user_id,
-                    'status': req.status,
-                    'title': req.title
-                }, room=f'user_{req.user_id}') # Emit to specific user room
-                
-                return jsonify({"message": "Repair request updated successfully"}), 200
-            elif request.method == 'DELETE':
-                self.db.session.delete(req)
-                self.db.session.commit()
-                return jsonify({"message": "Repair request deleted successfully"}), 204
-
-        @self.app.route('/booking-requests', methods=['GET', 'POST'])
-        def manage_booking_requests():
-            if request.method == 'POST':
-                data = request.json
-                new_booking = self.BookingRequests(
-                    user_id=data['user_id'],
-                    location=data['location'],
-                    date=datetime.fromisoformat(data['date']).date(),
-                    start_time=datetime.fromisoformat(data['start_time']).time(),
-                    end_time=datetime.fromisoformat(data['end_time']).time(),
-                    purpose=data.get('purpose'),
-                    attendee_count=data.get('attendee_count'),
-                    status='pending'
-                )
-                self.db.session.add(new_booking)
-                self.db.session.commit()
-                
-                user_name = new_booking.user.name if new_booking.user else 'Unknown User'
-                self.socketio.emit('new_booking_request', {
-                    'booking_id': new_booking.booking_id,
-                    'user_id': new_booking.user_id,
-                    'user_name': user_name, # New: Include user name
-                    'location': new_booking.location,
-                    'status': new_booking.status
-                }, room='admins')
-                return jsonify({"message": "Booking request submitted successfully", "booking_id": new_booking.booking_id}), 201
-            
-            elif request.method == 'GET':
-                bookings = self.BookingRequests.query.all()
-                result = []
-                for booking in bookings:
-                    user = booking.user # Use relationship
-                    result.append({
-                        "booking_id": booking.booking_id,
-                        "user_id": booking.user_id,
-                        "user_name": user.name if user else "Unknown User",
-                        "location": booking.location,
-                        "date": booking.date.isoformat(),
-                        "start_time": booking.start_time.isoformat(),
-                        "end_time": booking.end_time.isoformat(),
-                        "purpose": booking.purpose,
-                        "attendee_count": booking.attendee_count,
-                        "status": booking.status
-                    })
-                return jsonify(result)
-
-        @self.app.route('/booking-requests/<int:booking_id>', methods=['PUT', 'DELETE'])
-        def handle_single_booking_request(booking_id):
-            booking = self.BookingRequests.query.get_or_404(booking_id)
-            if request.method == 'PUT':
-                data = request.json
-                booking.location = data.get('location', booking.location)
-                booking.date = datetime.fromisoformat(data['date']).date() if 'date' in data else booking.date
-                booking.start_time = datetime.fromisoformat(data['start_time']).time() if 'start_time' in data else booking.start_time
-                booking.end_time = datetime.fromisoformat(data['end_time']).time() if 'end_time' in data else booking.end_time
-                booking.purpose = data.get('purpose', booking.purpose)
-                booking.attendee_count = data.get('attendee_count', booking.attendee_count)
-                booking.status = data.get('status', booking.status)
-                self.db.session.commit()
-                
-                self.socketio.emit('booking_status_updated', {
-                    'booking_id': booking.booking_id,
-                    'user_id': booking.user_id,
-                    'status': booking.status,
-                    'location': booking.location
-                }, room=f'user_{booking.user_id}')
-                return jsonify({"message": "Booking request updated successfully"}), 200
-            elif request.method == 'DELETE':
-                self.db.session.delete(booking)
-                self.db.session.commit()
-                return jsonify({"message": "Booking request deleted successfully"}), 204
-
-        @self.app.route('/bills', methods=['GET', 'POST']) # New: Bills API
-        def manage_bills():
-            if request.method == 'POST':
-                data = request.json
-                new_bill = self.Bills(
-                    item_name=data['item_name'],
-                    amount=data['amount'],
-                    due_date=datetime.fromisoformat(data['due_date']).date(),
-                    recipient_id=data.get('recipient_id', 'all'),
-                    issued_by_user_id=data['issued_by_user_id'],
-                    status='unpaid'
-                )
-                self.db.session.add(new_bill)
-                self.db.session.commit()
-
-                # Emit SocketIO event for new bill
-                self.socketio.emit('new_bill_created', {
-                    'bill_id': new_bill.bill_id,
-                    'item_name': new_bill.item_name,
-                    'amount': str(new_bill.amount),
-                    'due_date': new_bill.due_date.isoformat(),
-                    'recipient_id': new_bill.recipient_id,
-                    'status': new_bill.status
-                }, broadcast=True) # Broadcast to all relevant users (admins, specific recipient)
-                return jsonify({"message": "Bill created successfully", "bill_id": new_bill.bill_id}), 201
-            
-            elif request.method == 'GET':
-                bills = self.Bills.query.all()
-                result = []
-                for bill in bills:
-                    issued_by_user = bill.issued_by
-                    result.append({
-                        "bill_id": bill.bill_id,
-                        "item_name": bill.item_name,
-                        "amount": str(bill.amount),
-                        "due_date": bill.due_date.isoformat(),
-                        "recipient_id": bill.recipient_id,
-                        "issued_by_user_id": bill.issued_by_user_id,
-                        "issued_by_user_name": issued_by_user.name if issued_by_user else "Unknown",
-                        "status": bill.status
-                    })
-                return jsonify(result)
-
-        @self.app.route('/bills/<int:bill_id>', methods=['PUT', 'DELETE']) # New: Bills API
-        def handle_single_bill(bill_id):
-            bill = self.Bills.query.get_or_404(bill_id)
-            if request.method == 'PUT':
-                data = request.json
-                bill.item_name = data.get('item_name', bill.item_name)
-                bill.amount = data.get('amount', bill.amount)
-                bill.due_date = datetime.fromisoformat(data['due_date']).date() if 'due_date' in data else bill.due_date
-                bill.recipient_id = data.get('recipient_id', bill.recipient_id)
-                bill.status = data.get('status', bill.status) # Allow status update, e.g., by admin
-                self.db.session.commit()
-
-                self.socketio.emit('bill_updated', {
-                    'bill_id': bill.bill_id,
-                    'item_name': bill.item_name,
-                    'amount': str(bill.amount),
-                    'status': bill.status
-                }, broadcast=True)
-                return jsonify({"message": "Bill updated successfully"}), 200
-            elif request.method == 'DELETE':
-                bill_name = bill.item_name # Store name before deleting
-                self.db.session.delete(bill)
-                self.db.session.commit()
-                self.socketio.emit('bill_deleted', {'bill_id': bill_id, 'item_name': bill_name}, broadcast=True)
-                return jsonify({"message": "Bill deleted successfully"}), 204
-
-        @self.app.route('/payments', methods=['GET', 'POST'])
-        def manage_payments():
-            if request.method == 'POST':
-                data = request.json
-                new_payment = self.Payments(
-                    user_id=data['user_id'],
-                    bill_id=data.get('bill_id'), # New: Link to bill
-                    amount=data['amount'],
-                    payment_method=data.get('payment_method'),
-                    status=data.get('status', 'pending'),
-                    slip_path=data.get('slip_path')
-                )
-                self.db.session.add(new_payment)
-                self.db.session.commit()
-
-                user_name = new_payment.user.name if new_payment.user else 'Unknown User'
-                self.socketio.emit('new_payment_receipt', {
-                    'payment_id': new_payment.payment_id,
-                    'user_id': new_payment.user_id,
-                    'user_name': user_name, # New: Include user name
-                    'amount': str(new_payment.amount),
-                    'status': new_payment.status,
-                    'bill_id': new_payment.bill_id # New: Include bill_id
-                }, room='admins')
-                return jsonify({"message": "Payment recorded successfully", "payment_id": new_payment.payment_id}), 201
-            
-            elif request.method == 'GET':
-                # Allow filtering by user_id
-                user_id = request.args.get('user_id')
-                if user_id:
-                    payments = self.Payments.query.filter_by(user_id=user_id).all()
-                else:
-                    payments = self.Payments.query.all()
-
-                result = []
-                for payment in payments:
-                    user = payment.user
-                    bill = payment.bill # New: Get bill info
-                    result.append({
-                        "payment_id": payment.payment_id,
-                        "user_id": payment.user_id,
-                        "user_name": user.name if user else "Unknown User",
-                        "bill_id": payment.bill_id, # New: Include bill_id
-                        "bill_item_name": bill.item_name if bill else None, # New: Include bill item name
-                        "amount": str(payment.amount),
-                        "payment_method": payment.payment_method,
-                        "payment_date": payment.payment_date.isoformat(),
-                        "status": payment.status,
-                        "slip_path": payment.slip_path
-                    })
-                return jsonify(result)
-
-        @self.app.route('/payments/approve/<int:payment_id>', methods=['PUT']) # New: Approve payment API
-        def approve_payment(payment_id):
-            payment = self.Payments.query.get_or_404(payment_id)
-            data = request.json
-            new_status = data.get('status', 'paid') # Default to 'paid'
-
-            if new_status not in ['paid', 'rejected']:
-                return jsonify({"message": "Invalid status for payment approval"}), 400
-
-            payment.status = new_status
-            if payment.bill: # If linked to a bill, update bill status
-                payment.bill.status = new_status
-            self.db.session.commit()
-
-            self.socketio.emit('payment_approved', {
-                'payment_id': payment.payment_id,
-                'user_id': payment.user_id,
-                'bill_id': payment.bill_id,
-                'status': payment.status
-            }, broadcast=True) # Broadcast to relevant users
-            return jsonify({"message": f"Payment {payment_id} status updated to {new_status}"}), 200
-
-        @self.app.route('/calendar-events', methods=['GET', 'POST'])
-        def manage_calendar_events():
-            if request.method == 'POST':
-                data = request.json
-                new_event = self.CalendarEvents(
-                    event_name=data['event_name'],
-                    event_date=datetime.fromisoformat(data['event_date']),
-                    location=data.get('location'),
-                    description=data.get('description')
-                )
-                self.db.session.add(new_event)
-                self.db.session.commit()
-                self.socketio.emit('new_calendar_event', {
-                    'event_id': new_event.event_id,
-                    'event_name': new_event.event_name,
-                    'event_date': new_event.event_date.isoformat(),
-                    'location': new_event.location
-                }, broadcast=True)
-                return jsonify({"message": "Calendar event created successfully", "event_id": new_event.event_id}), 201
-            
-            elif request.method == 'GET':
-                events = self.CalendarEvents.query.all()
-                result = [
-                    {
-                        "event_id": event.event_id,
-                        "event_name": event.event_name,
-                        "event_date": event.event_date.isoformat(),
-                        "location": event.location,
-                        "description": event.description
-                    } for event in events
-                ]
-                return jsonify(result)
-
-        @self.app.route('/documents', methods=['GET', 'POST'])
-        def manage_documents():
-            if request.method == 'POST':
-                data = request.json
-                new_doc = self.Documents(
-                    document_name=data['document_name'],
-                    file_path=data['file_path'],
-                    uploaded_by_user_id=data['uploaded_by_user_id'],
-                    category=data.get('category') # New: Add category
-                )
-                self.db.session.add(new_doc)
-                self.db.session.commit()
-                return jsonify({"message": "Document uploaded successfully", "document_id": new_doc.document_id}), 201
-            
-            elif request.method == 'GET':
-                docs = self.Documents.query.all()
-                result = []
-                for doc in docs:
-                    user = doc.uploaded_by
-                    result.append({
-                        "document_id": doc.document_id,
-                        "document_name": doc.document_name,
-                        "file_path": doc.file_path,
-                        "uploaded_by_user_id": doc.uploaded_by_user_id,
-                        "uploaded_by_user_name": user.name if user else "Unknown User",
-                        "upload_date": doc.upload_date.isoformat(),
-                        "category": doc.category # New: Include category
-                    })
-                return jsonify(result)
-
-        @self.app.route('/documents/<int:document_id>', methods=['DELETE'])
-        def delete_document(document_id):
-            doc = self.Documents.query.get_or_404(document_id)
-            self.db.session.delete(doc)
-            self.db.session.commit()
-            return jsonify({"message": "Document deleted successfully"}), 204
-
-        @self.app.route('/security-visitors', methods=['GET', 'POST'])
-        def manage_security_visitors():
-            if request.method == 'POST':
-                data = request.json
-                new_visitor = self.SecurityVisitors(
-                    user_id=data['user_id'],
-                    name=data['name'],
-                    phone=data.get('phone'),
-                    visit_date=datetime.fromisoformat(data['visit_date']).date(),
-                    visit_time=datetime.fromisoformat(data['visit_time']).time(),
-                    purpose=data.get('purpose')
-                )
-                self.db.session.add(new_visitor)
-                self.db.session.commit()
-                
-                user_name = new_visitor.user.name if new_visitor.user else 'Unknown User'
-                self.socketio.emit('new_visitor_registered', {
-                    'visitor_id': new_visitor.visitor_id,
-                    'name': new_visitor.name,
-                    'visit_date': new_visitor.visit_date.isoformat(),
-                    'user_id': new_visitor.user_id,
-                    'user_name': user_name # New: Include user name
-                }, room='admins')
-                return jsonify({"message": "Visitor registered successfully", "visitor_id": new_visitor.visitor_id}), 201
-            
-            elif request.method == 'GET':
-                visitors = self.SecurityVisitors.query.all()
-                result = [
-                    {
-                        "visitor_id": visitor.visitor_id,
-                        "user_id": visitor.user_id,
-                        "user_name": visitor.user.name if visitor.user else "Unknown User", # New: Include user name
-                        "name": visitor.name,
-                        "phone": visitor.phone,
-                        "visit_date": visitor.visit_date.isoformat(),
-                        "visit_time": visitor.visit_time.isoformat(),
-                        "purpose": visitor.purpose
-                    } for visitor in visitors
-                ]
-                return jsonify(result)
-
-        @self.app.route('/security-incidents', methods=['GET', 'POST'])
-        def manage_security_incidents():
-            if request.method == 'POST':
-                data = request.json
-                new_incident = self.SecurityIncidents(
-                    user_id=data['user_id'],
-                    description=data['description'],
-                    evidence_paths=data.get('evidence_paths')
-                )
-                self.db.session.add(new_incident)
-                self.db.session.commit()
-                
-                user_name = new_incident.user.name if new_incident.user else 'Unknown User'
-                self.socketio.emit('new_incident_reported', {
-                    'incident_id': new_incident.incident_id,
-                    'user_id': new_incident.user_id,
-                    'user_name': user_name, # New: Include user name
-                    'description': new_incident.description,
-                    'reported_date': new_incident.reported_date.isoformat()
-                }, room='admins')
-                return jsonify({"message": "Incident reported successfully", "incident_id": new_incident.incident_id}), 201
-            
-            elif request.method == 'GET':
-                incidents = self.SecurityIncidents.query.all()
-                result = [
-                    {
-                        "incident_id": inc.incident_id,
-                        "user_id": inc.user_id,
-                        "user_name": inc.user.name if inc.user else "Unknown User", # New: Include user name
-                        "description": inc.description,
-                        "reported_date": inc.reported_date.isoformat(),
-                        "evidence_paths": inc.evidence_paths
-                    } for inc in incidents
-                ]
-                return jsonify(result)
-
-        @self.app.route('/voting-polls', methods=['GET', 'POST'])
-        def manage_voting_polls():
-            if request.method == 'POST':
-                data = request.json
-                new_poll = self.VotingPolls(
-                    title=data['title'],
-                    description=data.get('description'),
-                    start_date=datetime.fromisoformat(data['start_date']).date(),
-                    end_date=datetime.fromisoformat(data['end_date']).date()
-                )
-                self.db.session.add(new_poll)
-                self.db.session.commit()
-                
-                # Add options if provided
-                if 'options' in data and isinstance(data['options'], list):
-                    for option_text in data['options']:
-                        new_option = self.VotingOptions(poll_id=new_poll.poll_id, option_text=option_text)
-                        self.db.session.add(new_option)
-                    self.db.session.commit()
-
-                return jsonify({"message": "Voting poll created successfully", "poll_id": new_poll.poll_id}), 201
-            
-            elif request.method == 'GET':
-                polls = self.VotingPolls.query.all()
-                result = []
-                for poll in polls:
-                    options = self.VotingOptions.query.filter_by(poll_id=poll.poll_id).all()
-                    total_votes = self.VotingResults.query.filter_by(poll_id=poll.poll_id).count()
-                    
-                    options_data = []
-                    for option in options:
-                        vote_count = self.VotingResults.query.filter_by(option_id=option.option_id).count()
-                        options_data.append({
-                            "option_id": option.option_id,
-                            "option_text": option.option_text,
-                            "vote_count": vote_count
-                        })
-
-                    result.append({
-                        "poll_id": poll.poll_id,
-                        "title": poll.title,
-                        "description": poll.description,
-                        "start_date": poll.start_date.isoformat(),
-                        "end_date": poll.end_date.isoformat(),
-                        "options": options_data, # New: Include options and their counts
-                        "total_votes": total_votes # New: Include total votes
-                    })
-                return jsonify(result)
-
-        @self.app.route('/voting-options', methods=['POST'])
-        def add_voting_option():
-            data = request.json
-            new_option = self.VotingOptions(
-                poll_id=data['poll_id'],
-                option_text=data['option_text']
-            )
-            self.db.session.add(new_option)
-            self.db.session.commit()
-            return jsonify({"message": "Voting option added successfully", "option_id": new_option.option_id}), 201
-
-        @self.app.route('/voting-results', methods=['GET', 'POST'])
-        def manage_voting_results():
-            if request.method == 'POST':
-                data = request.json
-                # Check if user already voted in this poll
-                existing_vote = self.VotingResults.query.filter_by(
-                    poll_id=data['poll_id'],
-                    user_id=data['user_id']
-                ).first()
-                if existing_vote:
-                    return jsonify({"message": "You have already voted in this poll."}), 409
-
-                new_result = self.VotingResults(
-                    poll_id=data['poll_id'],
-                    option_id=data['option_id'],
-                    user_id=data['user_id']
-                )
-                self.db.session.add(new_result)
-                self.db.session.commit()
-                return jsonify({"message": "Vote recorded successfully", "result_id": new_result.result_id}), 201
-            
-            elif request.method == 'GET':
-                results = self.VotingResults.query.all()
-                result = [
-                    {
-                        "result_id": res.result_id,
-                        "poll_id": res.poll_id,
-                        "option_id": res.option_id,
-                        "user_id": res.user_id
-                    } for res in results
-                ]
-                return jsonify(result)
+        user.password_hash = generate_password_hash(data['password'])
         
-        @self.app.route('/chat-messages', methods=['GET'])
-        def get_chat_messages():
-            """API to get historical chat messages."""
-            messages = self.ChatMessages.query.order_by(self.ChatMessages.timestamp.asc()).all()
-            result = []
-            for msg in messages:
-                sender_user = msg.sender
-                sender_name = sender_user.name if sender_user else 'Unknown User'
-                sender_avatar = sender_user.avatar if sender_user else (sender_name[0].upper() if sender_name else '?')
-                result.append({
-                    'message_id': msg.message_id,
-                    'sender_id': msg.sender_id,
-                    'sender_name': sender_name,
-                    'sender_avatar': sender_avatar,
-                    'content': msg.content,
-                    'timestamp': msg.timestamp.isoformat(),
-                    'room_name': msg.room_name
-                })
-            return jsonify(result)
+    user.name = data.get('name', user.name)
+    user.username = data.get('username', user.username)
+    user.phone = data.get('phone', user.phone)
+    user.address = data.get('address', user.address)
+    user.role = data.get('role', user.role)
+    user.status = data.get('status', user.status)
 
-    def _setup_socketio_events(self):
-        """
-        Defines the SocketIO event handlers.
-        """
-        @self.socketio.on('connect')
-        def handle_connect():
-            print(f'Client {request.sid} connected')
-            # A client can join their specific user room for notifications
-            # and general chat room. Admin clients can join 'admins' room.
-            # This logic should ideally be tied to authentication.
-            # For now, assuming client sends user_id and role after connect.
+    try:
+        db.session.commit()
+        return jsonify({'message': 'User updated successfully', 'user': user.to_dict()}), 200
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'message': 'Username already exists'}), 409
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Error updating user: {str(e)}'}), 500
 
-        @self.socketio.on('disconnect')
-        def handle_disconnect():
-            print(f'Client {request.sid} disconnected')
+@app.route('/users/<user_id>', methods=['DELETE'])
+def delete_user():
+    user_id = request.view_args['user_id']
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'message': 'User not found'}), 404
 
-        @self.socketio.on('send_message')
-        def handle_send_message(data):
-            sender_id = data.get('sender_id')
-            content = data.get('content')
-            room_name = data.get('room_name', 'general_chat')
+    try:
+        db.session.delete(user)
+        db.session.commit()
+        return jsonify({'message': 'User deleted successfully'}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'Error deleting user: {str(e)}'}), 500
 
-            if not sender_id or not content:
-                emit('error', {'message': 'Missing sender_id or content'})
-                return
+# --- Announcement Routes ---
+@app.route('/announcements', methods=['POST'])
+def create_announcement():
+    data = request.get_json()
+    title = data.get('title')
+    content = data.get('content')
+    published_date_str = data.get('published_date')
+    author_id = data.get('author_id')
+    tag = data.get('tag')
 
-            try:
-                new_message = self.ChatMessages(
-                    sender_id=sender_id,
-                    content=content,
-                    room_name=room_name
-                )
-                self.db.session.add(new_message)
-                self.db.session.commit()
+    if not title or not content or not author_id:
+        return jsonify({'message': 'Title, content, and author_id are required'}), 400
 
-                sender_user = self.Users.query.get(sender_id)
-                sender_name = sender_user.name if sender_user else 'Unknown User'
-                sender_avatar = sender_user.avatar if sender_user else (sender_name[0].upper() if sender_name else '?')
+    try:
+        published_date = datetime.fromisoformat(published_date_str) if published_date_str else datetime.now()
+    except ValueError:
+        return jsonify({'message': 'Invalid date format for published_date. Use YYYY-MM-DD.'}), 400
 
-                message_payload = {
-                    'message_id': new_message.message_id,
-                    'sender_id': new_message.sender_id,
-                    'sender_name': sender_name,
-                    'sender_avatar': sender_avatar,
-                    'content': new_message.content,
-                    'timestamp': new_message.timestamp.isoformat(),
-                    'room_name': new_message.room_name
-                }
-                
-                self.socketio.emit('receive_message', message_payload, room=room_name)
-            except Exception as e:
-                self.db.session.rollback()
-                print(f"Error saving message: {e}")
-                emit('error', {'message': 'Failed to send message'})
+    tag_color = None
+    tag_bg = None
+    if tag == 'สำคัญ':
+        tag_color = '#1976d2'
+        tag_bg = '#e3f2fd'
+    elif tag == 'กิจกรรม':
+        tag_color = '#2e7d32'
+        tag_bg = '#e8f5e8'
+    elif tag == 'แจ้งเตือน':
+        tag_color = '#856404'
+        tag_bg = '#fff3cd'
 
-        @self.socketio.on('join_chat_room')
-        def handle_join_chat_room(data):
-            room_name = data.get('room_name')
-            if room_name:
-                join_room(room_name)
-                print(f"Client {request.sid} joined room: {room_name}")
-                emit('status', {'msg': f'Joined {room_name}'}, room=request.sid)
+    new_announcement = Announcement(
+        title=title,
+        content=content,
+        published_date=published_date,
+        author_id=author_id,
+        tag=tag,
+        tag_color=tag_color,
+        tag_bg=tag_bg
+    )
+    db.session.add(new_announcement)
+    db.session.commit()
+    socketio.emit('new_announcement', new_announcement.to_dict()) # Emit to all clients
+    return jsonify({'message': 'Announcement created successfully', 'announcement': new_announcement.to_dict()}), 201
 
-        @self.socketio.on('leave_chat_room')
-        def handle_leave_chat_room(data):
-            room_name = data.get('room_name')
-            if room_name:
-                leave_room(room_name)
-                print(f"Client {request.sid} left room: {room_name}")
-                emit('status', {'msg': f'Left {room_name}'}, room=request.sid)
-        
-        # New: Event for clients to join their personal user room
-        @self.socketio.on('join_user_room')
-        def handle_join_user_room(data):
-            user_id = data.get('user_id')
-            if user_id:
-                room_name = f'user_{user_id}'
-                join_room(room_name)
-                print(f"Client {request.sid} joined user room: {room_name}")
-                emit('status', {'msg': f'Joined personal room {room_name}'}, room=request.sid)
+@app.route('/announcements', methods=['GET'])
+def get_all_announcements():
+    announcements = Announcement.query.order_by(Announcement.published_date.desc()).all()
+    return jsonify([announcement.to_dict() for announcement in announcements]), 200
 
-    def run(self):
-        """
-        Runs the Flask application with SocketIO.
-        """
-        with self.app.app_context():
-            self.db.create_all() # ตรวจสอบและสร้างตารางหากยังไม่มี
+@app.route('/announcements/<announcement_id>', methods=['GET'])
+def get_announcement():
+    announcement_id = request.view_args['announcement_id']
+    announcement = Announcement.query.get(announcement_id)
+    if not announcement:
+        return jsonify({'message': 'Announcement not found'}), 404
+    return jsonify(announcement.to_dict()), 200
+
+@app.route('/announcements/<announcement_id>', methods=['PUT'])
+def update_announcement():
+    announcement_id = request.view_args['announcement_id']
+    announcement = Announcement.query.get(announcement_id)
+    if not announcement:
+        return jsonify({'message': 'Announcement not found'}), 404
+
+    data = request.get_json()
+    announcement.title = data.get('title', announcement.title)
+    announcement.content = data.get('content', announcement.content)
+    
+    published_date_str = data.get('published_date')
+    if published_date_str:
+        try:
+            announcement.published_date = datetime.fromisoformat(published_date_str)
+        except ValueError:
+            return jsonify({'message': 'Invalid date format for published_date. Use YYYY-MM-DD.'}), 400
             
-            # Initial dummy users for testing
-            if not self.Users.query.filter_by(username='admin').first():
-                admin_user = self.Users(name='Admin User', username='admin', role='admin', email='admin@example.com', avatar='A', status='approved')
-                admin_user.set_password('admin123')
-                self.db.session.add(admin_user)
-                self.db.session.commit()
-                print("Admin user created: username='admin', password='admin123'")
-            
-            if not self.Users.query.filter_by(username='resident').first():
-                resident_user = self.Users(name='Resident User', username='resident', role='resident', email='resident@example.com', avatar='R', status='approved')
-                resident_user.set_password('resident123')
-                self.db.session.add(resident_user)
-                self.db.session.commit()
-                print("Resident user created: username='resident', password='resident123'")
-                
-        self.socketio.run(self.app, host='0.0.0.0', port=5000, debug=True)
+    announcement.tag = data.get('tag', announcement.tag)
 
+    if announcement.tag == 'สำคัญ':
+        announcement.tag_color = '#1976d2'
+        announcement.tag_bg = '#e3f2fd'
+    elif announcement.tag == 'กิจกรรม':
+        announcement.tag_color = '#2e7d32'
+        announcement.tag_bg = '#e8f5e8'
+    elif announcement.tag == 'แจ้งเตือน':
+        announcement.tag_color = '#856404'
+        announcement.tag_bg = '#fff3cd'
+    else:
+        announcement.tag_color = None
+        announcement.tag_bg = None
+
+    db.session.commit()
+    socketio.emit('announcement_updated', announcement.to_dict()) # Emit to all clients
+    return jsonify({'message': 'Announcement updated successfully', 'announcement': announcement.to_dict()}), 200
+
+@app.route('/announcements/<announcement_id>', methods=['DELETE'])
+def delete_announcement():
+    announcement_id = request.view_args['announcement_id']
+    announcement = Announcement.query.get(announcement_id)
+    if not announcement:
+        return jsonify({'message': 'Announcement not found'}), 404
+
+    db.session.delete(announcement)
+    db.session.commit()
+    socketio.emit('announcement_deleted', {'announcement_id': announcement_id}) # Emit to all clients
+    return jsonify({'message': 'Announcement deleted successfully'}), 200
+
+# --- Repair Request Routes ---
+@app.route('/repair-requests', methods=['POST'])
+def create_repair_request():
+    data = request.get_json()
+    user_id = data.get('user_id')
+    title = data.get('title')
+    category = data.get('category')
+    description = data.get('description')
+    image_paths = data.get('image_paths')
+
+    if not user_id or not title or not category:
+        return jsonify({'message': 'User ID, title, and category are required'}), 400
+
+    new_request = RepairRequest(
+        user_id=user_id,
+        title=title,
+        category=category,
+        description=description,
+        image_paths=image_paths
+    )
+    db.session.add(new_request)
+    db.session.commit()
+    socketio.emit('new_repair_request', new_request.to_dict(), room='admins') # Notify admins
+    return jsonify({'message': 'Repair request created successfully', 'request': new_request.to_dict()}), 201
+
+@app.route('/repair-requests', methods=['GET'])
+def get_all_repair_requests():
+    user_id = request.args.get('user_id')
+    if user_id:
+        requests = RepairRequest.query.filter_by(user_id=user_id).order_by(RepairRequest.submitted_date.desc()).all()
+    else:
+        requests = RepairRequest.query.order_by(RepairRequest.submitted_date.desc()).all()
+    return jsonify([req.to_dict() for req in requests]), 200
+
+@app.route('/repair-requests/<request_id>', methods=['GET'])
+def get_repair_request():
+    request_id = request.view_args['request_id']
+    req = RepairRequest.query.get(request_id)
+    if not req:
+        return jsonify({'message': 'Repair request not found'}), 404
+    return jsonify(req.to_dict()), 200
+
+@app.route('/repair-requests/<request_id>', methods=['PUT'])
+def update_repair_request():
+    request_id = request.view_args['request_id']
+    req = RepairRequest.query.get(request_id)
+    if not req:
+        return jsonify({'message': 'Repair request not found'}), 404
+
+    data = request.get_json()
+    req.title = data.get('title', req.title)
+    req.category = data.get('category', req.category)
+    req.description = data.get('description', req.description)
+    
+    old_status = req.status
+    req.status = data.get('status', req.status)
+    req.image_paths = data.get('image_paths', req.image_paths)
+
+    db.session.commit()
+    if old_status != req.status:
+        socketio.emit('repair_status_updated', req.to_dict(), room=req.user_id) # Notify user
+    return jsonify({'message': 'Repair request updated successfully', 'request': req.to_dict()}), 200
+
+@app.route('/repair-requests/<request_id>', methods=['DELETE'])
+def delete_repair_request():
+    request_id = request.view_args['request_id']
+    req = RepairRequest.query.get(request_id)
+    if not req:
+        return jsonify({'message': 'Repair request not found'}), 404
+
+    db.session.delete(req)
+    db.session.commit()
+    return jsonify({'message': 'Repair request deleted successfully'}), 200
+
+# --- Booking Request Routes ---
+@app.route('/booking-requests', methods=['POST'])
+def create_booking_request():
+    data = request.get_json()
+    user_id = data.get('user_id')
+    location = data.get('location')
+    date_str = data.get('date')
+    start_time = data.get('start_time')
+    end_time = data.get('end_time')
+    purpose = data.get('purpose')
+    attendee_count = data.get('attendee_count')
+
+    if not user_id or not location or not date_str or not start_time or not end_time:
+        return jsonify({'message': 'User ID, location, date, start time, and end time are required'}), 400
+
+    try:
+        booking_date = date.fromisoformat(date_str)
+    except ValueError:
+        return jsonify({'message': 'Invalid date format. Use YYYY-MM-DD.'}), 400
+
+    new_booking = BookingRequest(
+        user_id=user_id,
+        location=location,
+        date=booking_date,
+        start_time=start_time,
+        end_time=end_time,
+        purpose=purpose,
+        attendee_count=attendee_count
+    )
+    db.session.add(new_booking)
+    db.session.commit()
+    socketio.emit('new_booking_request', new_booking.to_dict(), room='admins') # Notify admins
+    return jsonify({'message': 'Booking request created successfully', 'booking': new_booking.to_dict()}), 201
+
+@app.route('/booking-requests', methods=['GET'])
+def get_all_booking_requests():
+    user_id = request.args.get('user_id')
+    if user_id:
+        requests = BookingRequest.query.filter_by(user_id=user_id).order_by(BookingRequest.date.desc(), BookingRequest.start_time.desc()).all()
+    else:
+        requests = BookingRequest.query.order_by(BookingRequest.date.desc(), BookingRequest.start_time.desc()).all()
+    return jsonify([req.to_dict() for req in requests]), 200
+
+@app.route('/booking-requests/<booking_id>', methods=['GET'])
+def get_booking_request():
+    booking_id = request.view_args['booking_id']
+    req = BookingRequest.query.get(booking_id)
+    if not req:
+        return jsonify({'message': 'Booking request not found'}), 404
+    return jsonify(req.to_dict()), 200
+
+@app.route('/booking-requests/<booking_id>', methods=['PUT'])
+def update_booking_request():
+    booking_id = request.view_args['booking_id']
+    req = BookingRequest.query.get(booking_id)
+    if not req:
+        return jsonify({'message': 'Booking request not found'}), 404
+
+    data = request.get_json()
+    req.location = data.get('location', req.location)
+    
+    date_str = data.get('date')
+    if date_str:
+        try:
+            req.date = date.fromisoformat(date_str)
+        except ValueError:
+            return jsonify({'message': 'Invalid date format. Use YYYY-MM-DD.'}), 400
+
+    req.start_time = data.get('start_time', req.start_time)
+    req.end_time = data.get('end_time', req.end_time)
+    req.purpose = data.get('purpose', req.purpose)
+    req.attendee_count = data.get('attendee_count', req.attendee_count)
+    req.status = data.get('status', req.status)
+
+    db.session.commit()
+    return jsonify({'message': 'Booking request updated successfully', 'booking': req.to_dict()}), 200
+
+@app.route('/booking-requests/<booking_id>', methods=['DELETE'])
+def delete_booking_request():
+    booking_id = request.view_args['booking_id']
+    req = BookingRequest.query.get(booking_id)
+    if not req:
+        return jsonify({'message': 'Booking request not found'}), 404
+
+    db.session.delete(req)
+    db.session.commit()
+    return jsonify({'message': 'Booking request deleted successfully'}), 200
+
+# --- Bill Routes ---
+@app.route('/bills', methods=['POST'])
+def create_bill():
+    data = request.get_json()
+    item_name = data.get('item_name')
+    amount = data.get('amount')
+    due_date_str = data.get('due_date')
+    recipient_id = data.get('recipient_id')
+    issued_by_user_id = data.get('issued_by_user_id')
+
+    if not item_name or amount is None or not due_date_str or not recipient_id or not issued_by_user_id:
+        return jsonify({'message': 'Missing required fields'}), 400
+
+    try:
+        due_date = date.fromisoformat(due_date_str)
+        amount = float(amount)
+    except ValueError:
+        return jsonify({'message': 'Invalid date or amount format'}), 400
+
+    new_bill = Bill(
+        item_name=item_name,
+        amount=amount,
+        due_date=due_date,
+        recipient_id=recipient_id,
+        issued_by_user_id=issued_by_user_id,
+        status='unpaid'
+    )
+    db.session.add(new_bill)
+    db.session.commit()
+    socketio.emit('new_bill_created', new_bill.to_dict()) # Notify relevant users
+    return jsonify({'message': 'Bill created successfully', 'bill': new_bill.to_dict()}), 201
+
+@app.route('/bills', methods=['GET'])
+def get_all_bills():
+    user_id = request.args.get('user_id')
+    
+    if user_id:
+        bills = Bill.query.filter(
+            (Bill.recipient_id == user_id) | (Bill.recipient_id == 'all')
+        ).order_by(Bill.issued_date.desc()).all()
+    else:
+        bills = Bill.query.order_by(Bill.issued_date.desc()).all()
+    
+    return jsonify([bill.to_dict() for bill in bills]), 200
+
+@app.route('/bills/<bill_id>', methods=['GET'])
+def get_bill():
+    bill_id = request.view_args['bill_id']
+    bill = Bill.query.get(bill_id)
+    if not bill:
+        return jsonify({'message': 'Bill not found'}), 404
+    return jsonify(bill.to_dict()), 200
+
+@app.route('/bills/<bill_id>', methods=['PUT'])
+def update_bill():
+    bill_id = request.view_args['bill_id']
+    bill = Bill.query.get(bill_id)
+    if not bill:
+        return jsonify({'message': 'Bill not found'}), 404
+
+    data = request.get_json()
+    bill.item_name = data.get('item_name', bill.item_name)
+    bill.amount = data.get('amount', bill.amount)
+    
+    due_date_str = data.get('due_date')
+    if due_date_str:
+        try:
+            bill.due_date = date.fromisoformat(due_date_str)
+        except ValueError:
+            return jsonify({'message': 'Invalid date format for due_date'}), 400
+            
+    bill.recipient_id = data.get('recipient_id', bill.recipient_id)
+    bill.status = data.get('status', bill.status)
+
+    db.session.commit()
+    socketio.emit('bill_updated', bill.to_dict()) # Notify relevant users
+    return jsonify({'message': 'Bill updated successfully', 'bill': bill.to_dict()}), 200
+
+@app.route('/bills/<bill_id>', methods=['DELETE'])
+def delete_bill():
+    bill_id = request.view_args['bill_id']
+    bill = Bill.query.get(bill_id)
+    if not bill:
+        return jsonify({'message': 'Bill not found'}), 404
+
+    db.session.delete(bill)
+    db.session.commit()
+    socketio.emit('bill_deleted', {'bill_id': bill_id, 'item_name': bill.item_name}) # Notify relevant users
+    return jsonify({'message': 'Bill deleted successfully'}), 200
+
+# --- Payment Routes ---
+@app.route('/payments', methods=['POST'])
+def create_payment():
+    data = request.get_json()
+    bill_id = data.get('bill_id')
+    user_id = data.get('user_id')
+    amount = data.get('amount')
+    payment_method = data.get('payment_method')
+    slip_path = data.get('slip_path')
+
+    if not bill_id or not user_id or amount is None or not payment_method:
+        return jsonify({'message': 'Missing required fields'}), 400
+
+    bill = Bill.query.get(bill_id)
+    if not bill:
+        return jsonify({'message': 'Bill not found'}), 404
+
+    new_payment = Payment(
+        bill_id=bill_id,
+        user_id=user_id,
+        amount=amount,
+        payment_method=payment_method,
+        slip_path=slip_path,
+        status='pending'
+    )
+    db.session.add(new_payment)
+    
+    bill.status = 'pending_verification'
+    
+    db.session.commit()
+    socketio.emit('new_payment_receipt', new_payment.to_dict(), room='admins') # Notify admins
+    return jsonify({'message': 'Payment recorded successfully, awaiting verification', 'payment': new_payment.to_dict()}), 201
+
+@app.route('/payments', methods=['GET'])
+def get_all_payments():
+    user_id = request.args.get('user_id')
+    if user_id:
+        payments = Payment.query.filter_by(user_id=user_id).order_by(Payment.payment_date.desc()).all()
+    else:
+        payments = Payment.query.order_by(Payment.payment_date.desc()).all()
+    return jsonify([payment.to_dict() for payment in payments]), 200
+
+@app.route('/payments/<payment_id>', methods=['GET'])
+def get_payment():
+    payment_id = request.view_args['payment_id']
+    payment = Payment.query.get(payment_id)
+    if not payment:
+        return jsonify({'message': 'Payment not found'}), 404
+    return jsonify(payment.to_dict()), 200
+
+@app.route('/payments/approve/<payment_id>', methods=['PUT'])
+def approve_payment():
+    payment_id = request.view_args['payment_id']
+    payment = Payment.query.get(payment_id)
+    if not payment:
+        return jsonify({'message': 'Payment not found'}), 404
+
+    if payment.status == 'paid':
+        return jsonify({'message': 'Payment already approved'}), 400
+
+    payment.status = 'paid'
+    
+    bill = Bill.query.get(payment.bill_id)
+    if bill:
+        bill.status = 'paid'
+
+    db.session.commit()
+    return jsonify({'message': 'Payment approved successfully', 'payment': payment.to_dict()}), 200
+
+@app.route('/payments/reject/<payment_id>', methods=['PUT'])
+def reject_payment():
+    payment_id = request.view_args['payment_id']
+    payment = Payment.query.get(payment_id)
+    if not payment:
+        return jsonify({'message': 'Payment not found'}), 404
+
+    if payment.status == 'paid':
+        return jsonify({'message': 'Cannot reject an already paid payment'}), 400
+
+    payment.status = 'rejected'
+    
+    bill = Bill.query.get(payment.bill_id)
+    if bill and bill.status == 'pending_verification':
+        bill.status = 'unpaid'
+
+    db.session.commit()
+    return jsonify({'message': 'Payment rejected', 'payment': payment.to_dict()}), 200
+
+# --- Document Routes ---
+@app.route('/documents', methods=['POST'])
+def create_document():
+    data = request.get_json()
+    document_name = data.get('document_name')
+    file_path = data.get('file_path')
+    uploaded_by_user_id = data.get('uploaded_by_user_id')
+    category = data.get('category')
+    file_size = data.get('file_size')
+
+    if not document_name or not file_path or not uploaded_by_user_id:
+        return jsonify({'message': 'Document name, file path, and uploader ID are required'}), 400
+
+    new_document = Document(
+        document_name=document_name,
+        file_path=file_path,
+        uploaded_by_user_id=uploaded_by_user_id,
+        category=category,
+        file_size=file_size
+    )
+    db.session.add(new_document)
+    db.session.commit()
+    return jsonify({'message': 'Document uploaded successfully', 'document': new_document.to_dict()}), 201
+
+@app.route('/documents', methods=['GET'])
+def get_all_documents():
+    user_id = request.args.get('user_id')
+    if user_id:
+        documents = Document.query.filter_by(uploaded_by_user_id=user_id).order_by(Document.upload_date.desc()).all()
+    else:
+        documents = Document.query.order_by(Document.upload_date.desc()).all()
+    return jsonify([doc.to_dict() for doc in documents]), 200
+
+@app.route('/documents/<document_id>', methods=['GET'])
+def get_document():
+    document_id = request.view_args['document_id']
+    doc = Document.query.get(document_id)
+    if not doc:
+        return jsonify({'message': 'Document not found'}), 404
+    return jsonify(doc.to_dict()), 200
+
+@app.route('/documents/<document_id>', methods=['PUT'])
+def update_document():
+    document_id = request.view_args['document_id']
+    doc = Document.query.get(document_id)
+    if not doc:
+        return jsonify({'message': 'Document not found'}), 404
+
+    data = request.get_json()
+    doc.document_name = data.get('document_name', doc.document_name)
+    doc.category = data.get('category', doc.category)
+    doc.file_size = data.get('file_size', doc.file_size)
+
+    db.session.commit()
+    return jsonify({'message': 'Document updated successfully', 'document': doc.to_dict()}), 200
+
+@app.route('/documents/<document_id>', methods=['DELETE'])
+def delete_document():
+    document_id = request.view_args['document_id']
+    doc = Document.query.get(document_id)
+    if not doc:
+        return jsonify({'message': 'Document not found'}), 404
+
+    db.session.delete(doc)
+    db.session.commit()
+    return jsonify({'message': 'Document deleted successfully'}), 200
+
+# --- Security Routes ---
+@app.route('/security-visitors', methods=['POST'])
+def register_visitor():
+    data = request.get_json()
+    user_id = data.get('user_id')
+    name = data.get('name')
+    phone = data.get('phone')
+    visit_date_str = data.get('visit_date')
+    visit_time = data.get('visit_time')
+    purpose = data.get('purpose')
+
+    if not user_id or not name or not visit_date_str:
+        return jsonify({'message': 'User ID, visitor name, and visit date are required'}), 400
+
+    try:
+        visit_date = date.fromisoformat(visit_date_str)
+    except ValueError:
+        return jsonify({'message': 'Invalid date format for visit_date. Use YYYY-MM-DD.'}), 400
+
+    new_visitor = SecurityVisitor(
+        user_id=user_id,
+        name=name,
+        phone=phone,
+        visit_date=visit_date,
+        visit_time=visit_time,
+        purpose=purpose
+    )
+    db.session.add(new_visitor)
+    db.session.commit()
+    socketio.emit('new_visitor_registered', new_visitor.to_dict(), room='admins') # Notify admins
+    return jsonify({'message': 'Visitor registered successfully', 'visitor': new_visitor.to_dict()}), 201
+
+@app.route('/security-visitors', methods=['GET'])
+def get_all_visitors():
+    user_id = request.args.get('user_id')
+    if user_id:
+        visitors = SecurityVisitor.query.filter_by(user_id=user_id).order_by(SecurityVisitor.visit_date.desc(), SecurityVisitor.visit_time.desc()).all()
+    else:
+        visitors = SecurityVisitor.query.order_by(SecurityVisitor.visit_date.desc(), SecurityVisitor.visit_time.desc()).all()
+    return jsonify([visitor.to_dict() for visitor in visitors]), 200
+
+@app.route('/security-incidents', methods=['POST'])
+def report_incident():
+    data = request.get_json()
+    user_id = data.get('user_id')
+    description = data.get('description')
+    evidence_paths = data.get('evidence_paths')
+
+    if not user_id or not description:
+        return jsonify({'message': 'User ID and description are required'}), 400
+
+    new_incident = SecurityIncident(
+        user_id=user_id,
+        description=description,
+        evidence_paths=evidence_paths
+    )
+    db.session.add(new_incident)
+    db.session.commit()
+    socketio.emit('new_incident_reported', new_incident.to_dict(), room='admins') # Notify admins
+    return jsonify({'message': 'Incident reported successfully', 'incident': new_incident.to_dict()}), 201
+
+@app.route('/security-incidents', methods=['GET'])
+def get_all_incidents():
+    user_id = request.args.get('user_id')
+    if user_id:
+        incidents = SecurityIncident.query.filter_by(user_id=user_id).order_by(SecurityIncident.reported_date.desc()).all()
+    else:
+        incidents = SecurityIncident.query.order_by(SecurityIncident.reported_date.desc()).all()
+    return jsonify([incident.to_dict() for incident in incidents]), 200
+
+@app.route('/security-incidents/<incident_id>', methods=['PUT'])
+def update_incident_status():
+    incident_id = request.view_args['incident_id']
+    incident = SecurityIncident.query.get(incident_id)
+    if not incident:
+        return jsonify({'message': 'Incident not found'}), 404
+
+    data = request.get_json()
+    incident.status = data.get('status', incident.status)
+
+    db.session.commit()
+    return jsonify({'message': 'Incident status updated successfully', 'incident': incident.to_dict()}), 200
+
+# --- Voting Routes ---
+@app.route('/voting-polls', methods=['POST'])
+def create_voting_poll():
+    data = request.get_json()
+    title = data.get('title')
+    description = data.get('description')
+    end_date_str = data.get('end_date')
+    created_by_user_id = data.get('created_by_user_id')
+    options_data = data.get('options', [])
+
+    if not title or not end_date_str or not created_by_user_id or not options_data:
+        return jsonify({'message': 'Title, end date, creator, and options are required'}), 400
+
+    try:
+        end_date = datetime.fromisoformat(end_date_str)
+    except ValueError:
+        return jsonify({'message': 'Invalid date format for end_date. Use YYYY-MM-DD.'}), 400
+
+    new_poll = VotingPoll(
+        title=title,
+        description=description,
+        end_date=end_date,
+        created_by_user_id=created_by_user_id
+    )
+    db.session.add(new_poll)
+    db.session.flush()
+
+    for opt_text in options_data:
+        new_option = VotingOption(poll_id=new_poll.poll_id, option_text=opt_text)
+        db.session.add(new_option)
+
+    db.session.commit()
+    return jsonify({'message': 'Voting poll created successfully', 'poll': new_poll.to_dict()}), 201
+
+@app.route('/voting-polls', methods=['GET'])
+def get_all_voting_polls():
+    polls = VotingPoll.query.order_by(VotingPoll.end_date.desc()).all()
+    return jsonify([poll.to_dict() for poll in polls]), 200
+
+@app.route('/voting-polls/<poll_id>', methods=['GET'])
+def get_voting_poll():
+    poll_id = request.view_args['poll_id']
+    poll = VotingPoll.query.get(poll_id)
+    if not poll:
+        return jsonify({'message': 'Voting poll not found'}), 404
+    return jsonify(poll.to_dict()), 200
+
+@app.route('/voting-results', methods=['POST'])
+def submit_vote():
+    data = request.get_json()
+    poll_id = data.get('poll_id')
+    option_id = data.get('option_id')
+    user_id = data.get('user_id')
+
+    if not poll_id or not option_id or not user_id:
+        return jsonify({'message': 'Poll ID, option ID, and user ID are required'}), 400
+
+    poll = VotingPoll.query.get(poll_id)
+    option = VotingOption.query.get(option_id)
+
+    if not poll or not option:
+        return jsonify({'message': 'Poll or option not found'}), 404
+
+    if poll.end_date < datetime.now():
+        return jsonify({'message': 'Voting for this poll has ended'}), 400
+
+    existing_vote = VotingResult.query.filter_by(poll_id=poll_id, user_id=user_id).first()
+    if existing_vote:
+        return jsonify({'message': 'You have already voted in this poll'}), 409
+
+    new_vote = VotingResult(
+        poll_id=poll_id,
+        option_id=option_id,
+        user_id=user_id
+    )
+    try:
+        db.session.add(new_vote)
+        option.vote_count += 1
+        db.session.commit()
+        return jsonify({'message': 'Vote submitted successfully', 'result': new_vote.to_dict()}), 201
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'message': 'Database error: Could not submit vote'}), 500
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'message': f'An unexpected error occurred: {str(e)}'}), 500
+
+@app.route('/voting-results/<poll_id>', methods=['GET'])
+def get_poll_results():
+    poll_id = request.view_args['poll_id']
+    poll = VotingPoll.query.get(poll_id)
+    if not poll:
+        return jsonify({'message': 'Voting poll not found'}), 404
+    
+    return jsonify(poll.to_dict()), 200
+
+# --- Calendar Routes ---
+@app.route('/calendar-events', methods=['POST'])
+def create_calendar_event():
+    data = request.get_json()
+    event_name = data.get('event_name')
+    event_date_str = data.get('event_date')
+    start_time = data.get('start_time')
+    end_time = data.get('end_time')
+    location = data.get('location')
+    description = data.get('description')
+
+    if not event_name or not event_date_str:
+        return jsonify({'message': 'Event name and date are required'}), 400
+
+    try:
+        event_date = date.fromisoformat(event_date_str)
+    except ValueError:
+        return jsonify({'message': 'Invalid date format for event_date. Use YYYY-MM-DD.'}), 400
+
+    new_event = CalendarEvent(
+        event_name=event_name,
+        event_date=event_date,
+        start_time=start_time,
+        end_time=end_time,
+        location=location,
+        description=description
+    )
+    db.session.add(new_event)
+    db.session.commit()
+    socketio.emit('new_calendar_event', new_event.to_dict()) # Notify all clients
+    return jsonify({'message': 'Calendar event created successfully', 'event': new_event.to_dict()}), 201
+
+@app.route('/calendar-events', methods=['GET'])
+def get_all_calendar_events():
+    events = CalendarEvent.query.order_by(CalendarEvent.event_date.asc(), CalendarEvent.start_time.asc()).all()
+    return jsonify([event.to_dict() for event in events]), 200
+
+@app.route('/calendar-events/<event_id>', methods=['GET'])
+def get_calendar_event():
+    event_id = request.view_args['event_id']
+    event = CalendarEvent.query.get(event_id)
+    if not event:
+        return jsonify({'message': 'Calendar event not found'}), 404
+    return jsonify(event.to_dict()), 200
+
+@app.route('/calendar-events/<event_id>', methods=['PUT'])
+def update_calendar_event():
+    event_id = request.view_args['event_id']
+    event = CalendarEvent.query.get(event_id)
+    if not event:
+        return jsonify({'message': 'Calendar event not found'}), 404
+
+    data = request.get_json()
+    event.event_name = data.get('event_name', event.event_name)
+    
+    event_date_str = data.get('event_date')
+    if event_date_str:
+        try:
+            event.event_date = date.fromisoformat(event_date_str)
+        except ValueError:
+            return jsonify({'message': 'Invalid date format for event_date'}), 400
+            
+    event.start_time = data.get('start_time', event.start_time)
+    event.end_time = data.get('end_time', event.end_time)
+    event.location = data.get('location', event.location)
+    event.description = data.get('description', event.description)
+
+    db.session.commit()
+    return jsonify({'message': 'Calendar event updated successfully', 'event': event.to_dict()}), 200
+
+@app.route('/calendar-events/<event_id>', methods=['DELETE'])
+def delete_calendar_event():
+    event_id = request.view_args['event_id']
+    event = CalendarEvent.query.get(event_id)
+    if not event:
+        return jsonify({'message': 'Calendar event not found'}), 404
+
+    db.session.delete(event)
+    db.session.commit()
+    return jsonify({'message': 'Calendar event deleted successfully'}), 200
+
+# --- Chat SocketIO Events ---
+@socketio.on('connect')
+def handle_connect():
+    print('Client connected:', request.sid)
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    print('Client disconnected:', request.sid)
+
+@socketio.on('join_chat_room')
+def handle_join_room(data):
+    room_name = data.get('room_name')
+    if room_name:
+        join_room(room_name)
+        print(f"Client {request.sid} joined room: {room_name}")
+
+@socketio.on('leave_chat_room')
+def handle_leave_room(data):
+    room_name = data.get('room_name')
+    if room_name:
+        leave_room(room_name)
+        print(f"Client {request.sid} left room: {room_name}")
+
+@socketio.on('send_message')
+def handle_send_message(data):
+    sender_id = data.get('sender_id')
+    room_name = data.get('room_name')
+    content = data.get('content')
+    sender_name = data.get('sender_name', 'Unknown User')
+    sender_avatar = data.get('sender_avatar', 'U')
+
+    if not sender_id or not room_name or not content:
+        emit('error', {'message': 'Missing message data'})
+        return
+
+    new_message = ChatMessage(
+        sender_id=sender_id,
+        room_name=room_name,
+        content=content
+    )
+    db.session.add(new_message)
+    db.session.commit()
+
+    emit('receive_message', {
+        'message_id': new_message.message_id,
+        'sender_id': new_message.sender_id,
+        'sender_name': sender_name,
+        'sender_avatar': sender_avatar,
+        'room_name': new_message.room_name,
+        'content': new_message.content,
+        'timestamp': new_message.timestamp.isoformat()
+    }, room=room_name)
+    print(f"Message sent to room {room_name} by {sender_name}: {content}")
+
+@app.route('/chat-messages', methods=['GET'])
+def get_chat_messages():
+    room_name = request.args.get('room_name', 'general_chat')
+    messages = ChatMessage.query.filter_by(room_name=room_name).order_by(ChatMessage.timestamp.asc()).all()
+    return jsonify([msg.to_dict() for msg in messages]), 200
+
+
+# --- Main Execution ---
 if __name__ == '__main__':
-    # Instantiate and run the SmartVillageApp
-    smart_village_app = SmartVillageApp()
-    smart_village_app.run()
+    with app.app_context():
+        db.create_all() # Create tables if they don't exist
+
+        # Check if the database file exists and is empty, then populate
+        if not os.path.exists(DATABASE_FILE) or os.path.getsize(DATABASE_FILE) == 0:
+            populate_initial_data()
+        else:
+            # Check if there are any users. If not, it's likely a fresh start or cleared db.
+            if User.query.count() == 0:
+                populate_initial_data()
+            else:
+                print("Database already contains data. Skipping initial population.")
+
+    # Run the app with SocketIO
+    socketio.run(app, debug=True, port=5000)
 

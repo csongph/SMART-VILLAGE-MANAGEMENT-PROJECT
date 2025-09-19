@@ -1,0 +1,26 @@
+<div id="viewBillModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 id="viewBillTitle" class="modal-title">รายละเอียดใบแจ้งหนี้</h3>
+      <button class="modal-close" onclick="closeModal('viewBillModal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p><strong>รายการ:</strong> <span id="modalBillItem"></span></p>
+      <p><strong>จำนวนเงิน:</strong> <span id="modalBillAmount"></span></p>
+      <p><strong>ครบกำหนด:</strong> <span id="modalBillDueDate"></span></p>
+      <p><strong>สถานะ:</strong> <span id="modalBillStatus" class="status-badge"></span></p>
+      <p><strong>ผู้รับ:</strong> <span id="modalBillRecipient"></span></p>
+      <p><strong>หมายเหตุ:</strong> <span id="modalBillNotes"></span></p>
+
+      <div id="modalPaymentSlipContainer" class="hidden" style="margin-top:15px;">
+        <h4>หลักฐานการชำระเงิน:</h4>
+        <img id="modalPaymentSlip" src="" alt="หลักฐานการชำระเงิน" class="image-preview">
+      </div>
+      <p id="noPaymentSlip">ยังไม่มีหลักฐานการชำระเงิน</p>
+    </div>
+    <div id="adminBillActions" class="modal-footer hidden">
+      <button class="btn btn-success" onclick="approvePayment()">อนุมัติ</button>
+      <button class="btn btn-danger" onclick="rejectPayment()">ปฏิเสธ</button>
+    </div>
+  </div>
+</div>

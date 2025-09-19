@@ -1,0 +1,39 @@
+<div id="profile" class="page-content hidden">
+  <div class="page-title">
+    <h2>ข้อมูลส่วนตัว</h2>
+  </div>
+  <div class="card profile-card">
+    <div class="profile-avatar"><i class="fas fa-user-circle"></i></div>
+    <div class="profile-info">
+      <form id="profile-form">
+        <div class="form-group">
+          <label for="profile-name">ชื่อ-นามสกุล</label>
+          <input type="text" id="profile-name" disabled>
+        </div>
+        <div class="form-group">
+          <label for="profile-username">ชื่อผู้ใช้งาน</label>
+          <input type="text" id="profile-username" disabled>
+        </div>
+        <div class="form-group">
+          <label for="profile-phone">เบอร์โทรศัพท์</label>
+          <input type="tel" id="profile-phone" disabled>
+        </div>
+        <div class="form-group">
+          <label for="profile-address">ที่อยู่</label>
+          <input type="text" id="profile-address" disabled>
+        </div>
+        <div class="form-group">
+          <label for="profile-role">สถานะ</label>
+          <input type="text" id="profile-role" disabled>
+        </div>
+        <div class="button-group mt-20">
+          <button type="button" id="editProfileBtn" class="btn btn-secondary" onclick="toggleEditProfile(true)">
+            <i class="fas fa-edit"></i> แก้ไขข้อมูล
+          </button>
+          <button type="submit" id="saveProfileBtn" class="btn btn-primary hidden">บันทึก</button>
+          <button type="button" id="cancelEditBtn" class="btn btn-danger hidden" onclick="toggleEditProfile(false)">ยกเลิก</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,35 @@
+<div id="addBookingModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3 class="modal-title">จองพื้นที่ส่วนกลาง</h3>
+      <button class="modal-close" onclick="closeModal('addBookingModal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="bookingForm">
+        <div class="form-group">
+          <label for="booking-location">พื้นที่</label>
+          <input type="text" id="booking-location" required>
+        </div>
+        <div class="form-group">
+          <label for="booking-date">วันที่</label>
+          <input type="date" id="booking-date" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label for="booking-start-time">เวลาเริ่มต้น</label>
+            <input type="time" id="booking-start-time" required>
+          </div>
+          <div class="form-group">
+            <label for="booking-end-time">เวลาสิ้นสุด</label>
+            <input type="time" id="booking-end-time" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="booking-purpose">วัตถุประสงค์</label>
+          <textarea id="booking-purpose" rows="3" required></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary mt-20">ส่งคำขอจอง</button>
+      </form>
+    </div>
+  </div>
+</div>

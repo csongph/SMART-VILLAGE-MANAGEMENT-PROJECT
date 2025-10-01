@@ -19,11 +19,11 @@
             border-radius: 50%;
             transition: background-color 0.3s;
         }
-        
+
         .notification-bell:hover {
             background-color: #f8f9fa;
         }
-        
+
         .notification-count {
             position: absolute;
             top: 0;
@@ -63,7 +63,7 @@
             opacity: 0; /* Start hidden for animation */
             transform: translateX(100%); /* Start off-screen for animation */
         }
-        
+
         .notification.success { border-left-color: #28a745; }
         .notification.error { border-left-color: #dc3545; }
         .notification.warning { border-left-color: #ffc107; }
@@ -170,6 +170,10 @@
                     <input type="tel" class="form-control" id="regPhone" required>
                 </div>
                 <div class="form-group">
+                    <label for="regEmail">อีเมล</label>
+                    <input type="email" class="form-control" id="regEmail">
+                </div>
+                <div class="form-group">
                     <label for="regAddress">ที่อยู่ (บ้านเลขที่)</label>
                     <input type="text" class="form-control" id="regAddress" required>
                 </div>
@@ -202,8 +206,8 @@
 
         <div class="sidebar" id="sidebar">
             <ul class="sidebar-menu">
-                <li><a href="#" onclick="showPage('dashboard-home')" class="active"><i class="fas fa-tachometer-alt"></i> แดชบอร์ด</a></li>
-                <li><a href="#" onclick="showPage('profile')"><i class="fas fa-user"></i> ข้อมูลส่วนตัว</a></li>
+                <li><a href="#" onclick="showPage('dashboard-home')" class="active"><i class="fas fa-tachometer-alt"></i> หน้าหลัก</a></li>
+                <li><a href="#" onclick="showPage('profile')"><i class="fas fa-user"></i> แก้ไชข้อมูลส่วนตัว</a></li>
                 <li class="resident-menu"><a href="#" onclick="showPage('repair-request')"><i class="fas fa-wrench"></i> แจ้งซ่อม</a></li>
                 <li><a href="#" onclick="showPage('announcements')"><i class="fas fa-bullhorn"></i> ประกาศ</a></li>
                 <li class="resident-menu"><a href="#" onclick="showPage('payments')"><i class="fas fa-credit-card"></i> ชำระเงิน</a></li>
@@ -225,7 +229,7 @@
             <!-- Initial dashboard-home content (can be loaded dynamically or kept static) -->
             <div id="dashboard-home" class="page-content">
                 <div class="page-title">
-                    <h2>แดชบอร์ด</h2>
+                    <h2>หน้าหลัก</h2>
                     <p>ภาพรวมระบบจัดการหมู่บ้านจัดสรร</p>
                 </div>
 
@@ -1364,7 +1368,7 @@
                 </div>
                 <div id="qrCodeContainer" style="display:none; margin-top: 20px; text-align: center;">
                     <h4>สแกน QR Code เพื่อชำระเงิน</h4>
-                    <img src="https://placehold.co/300x300/E0E0E0/000000?text=QR+Code" alt="PromptPay QR Code" style="max-width: 300px; border-radius: 10px;">
+                    <img id="promptPayQrCode" src="QR-PAYMENT.jpg" alt="PromptPay QR Code" style="max-width: 300px; border-radius: 10px;">
                 </div>
                 <div id="bankDetails" class="form-group hidden">
                     <label>ข้อมูลบัญชีธนาคาร</label>
@@ -1446,6 +1450,10 @@
                 <div class="form-group">
                     <label for="userPhone">เบอร์ติดต่อ</label>
                     <input type="tel" class="form-control" id="userPhone">
+                </div>
+                <div class="form-group">
+                    <label for="userEmail">อีเมล</label>
+                    <input type="email" class="form-control" id="userEmail">
                 </div>
                 <div class="form-group">
                     <label for="userAddress">ที่อยู่ (บ้านเลขที่)</label>

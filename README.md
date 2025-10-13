@@ -188,38 +188,6 @@ Frontend Tests (Selenium)
 bash# ต้องรัน Backend Server ก่อน
 pip install selenium
 
-# ดาวน์โหลด ChromeDriver
-# ตั้งค่าให้ไม่ใช่ Headless mode
-HEADLESS=0 python tests/test_frontend.py
-ทดสอบ:
-
-Login Flow
-Navigation
-Form Validation
-UI Interactions
-
-
-🔧 การพัฒนาและปรับแต่ง
-เพิ่มฟีเจอร์ใหม่
-
-Backend: เพิ่ม Route ใหม่ใน app.py (ใช้ Services Pattern)
-Database: เพิ่ม Model ใน app.py แล้วรัน db.create_all()
-Frontend: เพิ่ม Page ใน index.html และ Logic ใน script.js (ใช้ OOP)
-Real-time: เพิ่ม Socket.IO Event ทั้ง Server และ Client
-
-
-File Upload
-
-จำกัดขนาดไฟล์สูงสุด 16MB (ปรับได้ใน config)
-ตรวจสอบ file extension และ MIME type
-ใช้ secure_filename() เพื่อป้องกัน Path Traversal
-
-Database
-
-💾 Backup smart_village.db เป็นประจำ
-🔄 ใช้ Migration Tool (เช่น Alembic) สำหรับ Schema Changes
-🚀 พิจารณาย้ายไป PostgreSQL/MySQL สำหรับ Production
-
 Network
 
 ถ้าพอร์ต 5000 ถูกใช้งานอยู่ ให้แก้ไขใน app.py:

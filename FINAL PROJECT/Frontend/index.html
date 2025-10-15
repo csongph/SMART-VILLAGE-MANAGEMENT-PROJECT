@@ -470,54 +470,37 @@
                 </div>
             </div>
 
-            <!-- ==========================
-     หน้าประกาศ (Announcements)
-=========================== -->
-<div id="announcements" class="page-content hidden">
+            <div id="announcements" class="page-content hidden">
+                <div class="page-title">
+                    <h2>ประกาศ</h2>
+                    <p>ข่าวสารและประกาศสำคัญของหมู่บ้าน</p>
+                </div>
 
-  <!-- ส่วนหัวหน้าเพจ -->
-  <div class="page-title">
-    <h2>📢 ประกาศ</h2>
-    <p>ข่าวสารและประกาศสำคัญของหมู่บ้าน</p>
-  </div>
-
-  <!-- ส่วนของ Admin เท่านั้น -->
-  <div class="card admin-menu hidden">
-    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
-      <h3 class="card-title">จัดการประกาศ</h3>
-      <button class="btn btn-primary" onclick="showAddAnnouncementModal()">
-        <i class="fas fa-plus"></i> เพิ่มประกาศใหม่
-      </button>
-    </div>
-
-    <!-- ตารางรายการประกาศ -->
-    <div class="table-container" style="padding: 20px; overflow-x: auto;">
-      <table class="table" style="width: 100%; border-collapse: collapse;">
-        <thead style="background-color: #f0f0f0;">
-          <tr>
-            <th style="padding: 10px;">หัวข้อ</th>
-            <th style="padding: 10px;">วันที่</th>
-            <th style="padding: 10px;">โดย</th>
-            <th style="padding: 10px; text-align: center;">การดำเนินการ</th>
-          </tr>
-        </thead>
-        <tbody id="adminAnnouncementsTable">
-          <!-- แสดงรายการประกาศแบบ dynamic ผ่าน JS -->
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- ส่วนประกาศที่ผู้ใช้ทั่วไปมองเห็น -->
-  <div class="card user-announcements">
-    <div class="card-content" id="publicAnnouncements">
-      <!-- JS จะโหลดประกาศมาที่นี่ -->
-      <p class="no-announcement" style="text-align: center; color: gray;">
-        ยังไม่มีประกาศในขณะนี้
-      </p>
-    </div>
-  </div>
-</div>
+                <!-- Admin: Add New Announcement Button -->
+                <div class="card admin-menu hidden">
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                        <h3 class="card-title">จัดการประกาศ</h3>
+                        <button class="btn btn-primary" onclick="showAddAnnouncementModal()">
+                            <i class="fas fa-plus"></i> เพิ่มประกาศใหม่
+                        </button>
+                    </div>
+                    <!-- This section can be used for a table of all announcements for admin to manage -->
+                    <div class="table-container" style="padding: 20px;">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>หัวข้อ</th>
+                                    <th>วันที่</th>
+                                    <th>โดย</th>
+                                    <th>การดำเนินการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="adminAnnouncementsTable">
+                                <!-- Announcements will be dynamically loaded here for admin to manage -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
                 <div class="card mt-20">
                     <div class="card-header">
@@ -1544,4 +1527,5 @@
     <script src="script.js"></script>
 </body>
 </html>
+
 

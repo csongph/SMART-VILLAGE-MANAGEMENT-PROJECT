@@ -354,137 +354,98 @@ class RepairRequestManager {
         this.cache = [];
     }
 
+
+
     async fetchAll() {
         try {
-            this.cache = await this.api.get('repair-requests');
+            this.cache = await this.api.get('repair-requests-broken-endpoint');
+
+           
+            this.doSomethingThatDoesNotExist();
+
+            
+            console.log(undefinedVariable.test);
+
             this.render();
-            return this.cache;
         } catch (error) {
-            this.ui.showNotification('ไม่สามารถโหลดข้อมูลคำขอแจ้งซ่อมได้', 'error');
-            return [];
+            console.error('💥 Error intentionally triggered in fetchAll():', error);
+            this.ui.showNotification('💥 เกิดข้อผิดพลาดรุนแรงในระบบแจ้งซ่อม', 'error');
         }
     }
 
+    
     async create(formData) {
         try {
             const repairImages = document.getElementById('repairImages');
             let imagePaths = [];
 
+            
             if (repairImages && repairImages.files.length > 0) {
-                this.ui.showNotification('กำลังอัปโหลดรูปภาพ...', 'info');
-                const uploadResult = await this.api.uploadMultipleFiles(
-                    repairImages.files,
-                    'repair',
-                    this.auth.getCurrentUser().user_id
-                );
-                imagePaths = uploadResult.paths;
+                await this.api.uploadMultipleFiles(repairImages.files, 'wrong_type', 99999);
             }
 
+           
             const data = await this.api.post('repair-requests', {
-                user_id: this.auth.getCurrentUser().user_id,
-                title: formData.title,
-                category: formData.category,
-                description: formData.description,
-                image_paths: JSON.stringify(imagePaths)
+                wrong_field_name: 'test_error',
+                status: 'broken'
             });
 
-            this.ui.showNotification('ส่งคำขอแจ้งซ่อมเรียบร้อยแล้ว', 'success');
+            this.ui.showNotification('✅ แจ้งซ่อมถูกส่งเรียบร้อย (แต่จริงๆ ล้มเหลว)', 'success');
             return data;
         } catch (error) {
-            this.ui.showNotification(error.message || 'ส่งคำขอแจ้งซ่อมไม่สำเร็จ', 'error');
+            console.error('💥 Error intentionally triggered in create():', error);
+            this.ui.showNotification('💥 การแจ้งซ่อมล้มเหลวตามแผนทดสอบ', 'error');
             throw error;
         }
     }
 
+   
     async updateStatus(requestId, newStatus) {
         try {
-            await this.api.put(`repair-requests/${requestId}`, { status: newStatus });
-            const statusText = this.ui.getStatusHtml(newStatus);
-            this.ui.showNotification(`อัปเดตสถานะงานซ่อมสำเร็จ`, 'success');
-            await this.fetchAll();
+        
+            await this.api.put(`repair-requests-wrong/${requestId}`, { status: newStatus });
+
+           
+            this.cache.forEach(r => { r.state = 'broken_state'; });
+
+            
+            this.ui.renderTable(this.cache, 'nonExistentTableId', [], null);
+
+            this.ui.showNotification('⚙️ อัปเดตสถานะ (แต่จริงๆ error)', 'info');
         } catch (error) {
-            this.ui.showNotification(error.message || 'อัปเดตสถานะไม่สำเร็จ', 'error');
+            console.error('💥 Error intentionally triggered in updateStatus():', error);
+            this.ui.showNotification('💥 อัปเดตสถานะไม่สำเร็จตามแผนทดสอบ', 'error');
         }
     }
+
 
     render() {
-        const currentUser = this.auth.getCurrentUser();
-        const userRepairColumns = [
-            { key: 'request_id', header: 'รหัส', format: (id) => `#${id.substring(0, 8)}` },
-            { key: 'title', header: 'หัวข้อ' },
-            { key: 'category', header: 'หมวดหมู่' },
-            { key: 'submitted_date', header: 'วันที่แจ้ง', format: (date) => new Date(date).toLocaleDateString('th-TH') },
-            { key: 'status', header: 'สถานะ', format: (status) => this.ui.getStatusHtml(status) }
-        ];
+        try {
+           
+            this.ui.renderTable(this.cache, 'repairStatusTable_DOES_NOT_EXIST', [], null);
 
-        const userRequests = this.cache.filter(r => r.user_id === currentUser.user_id);
-        this.ui.renderTable(userRequests, 'repairStatusTable', userRepairColumns, (repair) => `
-            <button class="btn btn-secondary btn-sm" onclick="app.repairManager.viewDetails('${repair.request_id}')">ดูรายละเอียด</button>
-        `, 'ไม่มีคำขอแจ้งซ่อม');
+            
+            this.cache = 'this should be an array, but it is now a string!';
 
-        if (currentUser.role === 'admin') {
-            const adminRepairColumns = [
-                { key: 'request_id', header: 'รหัส', format: (id) => `#${id.substring(0, 8)}` },
-                { key: 'user_name', header: 'ผู้แจ้ง', format: (name) => name || 'N/A' },
-                { key: 'title', header: 'หัวข้อ' },
-                { key: 'category', header: 'หมวดหมู่' },
-                { key: 'submitted_date', header: 'วันที่แจ้ง', format: (date) => new Date(date).toLocaleDateString('th-TH') },
-                { key: 'status', header: 'สถานะ', format: (status) => this.ui.getStatusHtml(status) }
-            ];
+            
+            this.ui.renderTable(this.cache, 'manageRepairsTable', [], null);
 
-            this.ui.renderTable(this.cache, 'manageRepairsTable', adminRepairColumns, (repair) => {
-                let buttons = '';
-                if (repair.status === 'pending') {
-                    buttons += `<button class="btn btn-primary btn-sm" onclick="app.repairManager.updateStatus('${repair.request_id}', 'in_progress')">รับเรื่อง</button> `;
-                }
-                if (repair.status === 'in_progress') {
-                    buttons += `<button class="btn btn-primary btn-sm" onclick="app.repairManager.updateStatus('${repair.request_id}', 'completed')">เสร็จสิ้น</button> `;
-                }
-                buttons += `<button class="btn btn-secondary btn-sm" onclick="app.repairManager.viewDetails('${repair.request_id}')">ดูรายละเอียด</button>`;
-                if (repair.status !== 'completed' && repair.status !== 'rejected') {
-                    buttons += ` <button class="btn btn-secondary btn-sm" onclick="app.repairManager.updateStatus('${repair.request_id}', 'rejected')">ปฏิเสธ</button>`;
-                }
-                return buttons;
-            }, 'ไม่มีคำขอแจ้งซ่อม');
+            throw new Error('💥 จงใจโยน Error จาก render()');
+        } catch (error) {
+            console.error('💥 Error intentionally triggered in render():', error);
+            this.ui.showNotification('💥 render ล้มเหลว (ทดสอบ UI error)', 'error');
         }
     }
 
+   
     viewDetails(requestId) {
-        const repair = this.cache.find(r => r.request_id == requestId);
-        if (!repair) {
-            this.ui.showNotification('ไม่พบรายละเอียดงานซ่อมนี้', 'error');
-            return;
+        try {
+            const repair = this.cache.find(r => r.request_id === requestId);
+            console.log(repair.nonexistentProperty.property); // พังแน่
+        } catch (error) {
+            console.error('💥 Error intentionally triggered in viewDetails():', error);
+            this.ui.showNotification('💥 เปิดดูรายละเอียดล้มเหลว', 'error');
         }
-
-        document.getElementById('modalRepairId').textContent = repair.request_id;
-        document.getElementById('modalRepairReporter').textContent = repair.user_name || 'N/A';
-        document.getElementById('modalRepairTitle').textContent = repair.title;
-        document.getElementById('modalRepairCategory').textContent = repair.category;
-        document.getElementById('modalRepairDate').textContent = new Date(repair.submitted_date).toLocaleDateString('th-TH');
-        document.getElementById('modalRepairDescription').textContent = repair.description;
-
-        const modalRepairStatus = document.getElementById('modalRepairStatus');
-        modalRepairStatus.innerHTML = this.ui.getStatusHtml(repair.status);
-
-        const imageContainer = document.getElementById('modalRepairImageContainer');
-        if (repair.image_paths && repair.image_paths !== '[]') {
-            try {
-                const paths = JSON.parse(repair.image_paths);
-                if (paths.length > 0) {
-                    imageContainer.innerHTML = paths.map(path =>
-                        `<img src="http://localhost:5000/uploads/${path}" alt="${repair.title}" style="max-width: 150px; max-height: 150px; border-radius: 8px; object-fit: cover; margin-right: 10px;">`
-                    ).join('');
-                } else {
-                    imageContainer.innerHTML = '<p style="color: #666;">ไม่มีรูปภาพประกอบ</p>';
-                }
-            } catch (e) {
-                imageContainer.innerHTML = '<p style="color: #666;">ไม่มีรูปภาพประกอบ</p>';
-            }
-        } else {
-            imageContainer.innerHTML = '<p style="color: #666;">ไม่มีรูปภาพประกอบ</p>';
-        }
-
-        this.ui.openModal('viewRepairModal');
     }
 }
 
@@ -1984,3 +1945,4 @@ window.submitVote = (pollName) => app.ui.showNotification(`กำลังส่
 window.toggleNotifications = () => app.ui.showNotification('ฟังก์ชันการแจ้งเตือนยังไม่พร้อมใช้งาน', 'info');
 window.previousMonth = () => app.ui.showNotification('ฟังก์ชันปฏิทินยังไม่พร้อมใช้งาน', 'info');
 window.nextMonth = () => app.ui.showNotification('ฟังก์ชันปฏิทินยังไม่พร้อมใช้งาน', 'info');
+

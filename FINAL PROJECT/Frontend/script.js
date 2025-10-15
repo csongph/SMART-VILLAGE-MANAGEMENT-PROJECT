@@ -1984,3 +1984,6 @@ window.submitVote = (pollName) => app.ui.showNotification(`กำลังส่
 window.toggleNotifications = () => app.ui.showNotification('ฟังก์ชันการแจ้งเตือนยังไม่พร้อมใช้งาน', 'info');
 window.previousMonth = () => app.ui.showNotification('ฟังก์ชันปฏิทินยังไม่พร้อมใช้งาน', 'info');
 window.nextMonth = () => app.ui.showNotification('ฟังก์ชันปฏิทินยังไม่พร้อมใช้งาน', 'info');
+
+
+

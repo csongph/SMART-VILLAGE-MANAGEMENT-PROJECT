@@ -1,0 +1,19 @@
+{
+  "name": "smart-village",
+  "version": "1.0.0",
+  "description": "Smart Village Management System - Frontend dependencies",
+  "main": "index.js",
+  "scripts": {
+    "start": "echo \"Run your frontend server\" && exit 0",
+    "install-deps": "npm install",
+    "build": "echo \"Build frontend assets\" && exit 0"
+  },
+  "keywords": ["smart-village", "management", "flask", "frontend"],
+  "author": "AI Assistant",
+  "license": "MIT",
+  "dependencies": {
+    "chart.js": "^4.4.0",
+    "socket.io-client": "^4.7.2"
+  },
+  "devDependencies": {}
+}

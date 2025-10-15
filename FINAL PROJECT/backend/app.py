@@ -12,21 +12,47 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy import or_, and_
+from sqlalchemy.dialects.postgresql import UUID
 
 # ============================================
 # Configuration Class
 # ============================================
 class Config:
-    DATABASE_FILE = 'smart_village.db'
+    # แก้ไขตรงนี้ให้ตรงกับ PostgreSQL ของคุณ
+    POSTGRES_USER = 'postgres'  # เปลี่ยนเป็น username ของคุณ
+    POSTGRES_PASSWORD = '160366'  # เปลี่ยนเป็น password จริง
+    POSTGRES_HOST = 'localhost'
+    POSTGRES_PORT = '5433'
+    POSTGRES_DB = 'smart_village'
+    
+    # สำหรับ Production (เช่น Railway, Render)
+    DATABASE_URL = os.environ.get('DATABASE_URL')
+    
     UPLOAD_FOLDER = 'static/uploads'
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx'}
-    STATIC_FOLDER = r'D:/SMART-VILLAGE-MANAGEMENT-PROJECT/FINAL PROJECT/Frontend'
+    STATIC_FOLDER = os.environ.get('STATIC_FOLDER', 'Frontend')
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB
     
     @classmethod
     def init_app(cls, app):
-        app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{cls.DATABASE_FILE}'
+        # ใช้ DATABASE_URL ถ้ามี (สำหรับ Production)
+        if cls.DATABASE_URL:
+            # แก้ไข postgres:// เป็น postgresql:// สำหรับ SQLAlchemy
+            database_url = cls.DATABASE_URL.replace('postgres://', 'postgresql://')
+            app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+        else:
+            # ใช้ค่าที่ตั้งไว้สำหรับ Development
+            app.config['SQLALCHEMY_DATABASE_URI'] = (
+                f'postgresql://{cls.POSTGRES_USER}:{cls.POSTGRES_PASSWORD}@'
+                f'{cls.POSTGRES_HOST}:{cls.POSTGRES_PORT}/{cls.POSTGRES_DB}'
+            )
+        
         app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+            'pool_size': 10,
+            'pool_recycle': 3600,
+            'pool_pre_ping': True,  # ป้องกัน connection timeout
+        }
         app.config['UPLOAD_FOLDER'] = cls.UPLOAD_FOLDER
         app.config['MAX_CONTENT_LENGTH'] = cls.MAX_CONTENT_LENGTH
         
@@ -45,7 +71,6 @@ class FileManager:
         return '.' in filename and filename.rsplit('.', 1)[1].lower() in self.allowed_extensions
     
     def create_upload_folder(self, upload_type, user_id=None):
-        """สร้างโฟลเดอร์สำหรับจัดเก็บไฟล์ตามประเภทและ user_id"""
         if user_id:
             folder_path = os.path.join(self.upload_folder, upload_type, user_id)
         else:
@@ -57,7 +82,6 @@ class FileManager:
         return folder_path
     
     def save_file(self, file, upload_type, user_id=None):
-        """บันทึกไฟล์และคืนค่า path ที่สัมพันธ์กัน"""
         if not file or not self.allowed_file(file.filename):
             raise ValueError('File type not allowed')
         
@@ -68,7 +92,6 @@ class FileManager:
         file_path = os.path.join(folder_path, unique_filename)
         file.save(file_path)
         
-        # ส่ง path ที่สัมพันธ์กับ UPLOAD_FOLDER กลับไป
         if user_id:
             relative_path = os.path.join(upload_type, user_id, unique_filename)
         else:
@@ -77,7 +100,6 @@ class FileManager:
         return relative_path.replace('\\', '/')
     
     def save_multiple_files(self, files, upload_type, user_id=None):
-        """บันทึกหลายไฟล์และคืนค่า list ของ paths"""
         saved_paths = []
         for file in files:
             if file and self.allowed_file(file.filename):
@@ -86,7 +108,7 @@ class FileManager:
         return saved_paths
 
 # ============================================
-# Database Models
+# Database Models (PostgreSQL Compatible)
 # ============================================
 db = SQLAlchemy()
 
@@ -94,15 +116,15 @@ class User(db.Model):
     __tablename__ = 'users'
     user_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = db.Column(db.String(100), nullable=False)
-    username = db.Column(db.String(50), unique=True, nullable=False)
+    username = db.Column(db.String(50), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     phone = db.Column(db.String(20))
-    email = db.Column(db.String(100))
+    email = db.Column(db.String(100), index=True)
     address = db.Column(db.String(255))
-    role = db.Column(db.String(20), default='resident')
-    status = db.Column(db.String(20), default='pending')
-    created_at = db.Column(db.DateTime, default=datetime.now)
-    updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+    role = db.Column(db.String(20), default='resident', index=True)
+    status = db.Column(db.String(20), default='pending', index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     def to_dict(self):
         return {
@@ -123,8 +145,8 @@ class Announcement(db.Model):
     announcement_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     title = db.Column(db.String(255), nullable=False)
     content = db.Column(db.Text, nullable=False)
-    published_date = db.Column(db.DateTime, default=datetime.now)
-    author_id = db.Column(db.String(36), db.ForeignKey('users.user_id'))
+    published_date = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    author_id = db.Column(db.String(36), db.ForeignKey('users.user_id', ondelete='SET NULL'))
     tag = db.Column(db.String(50))
     tag_color = db.Column(db.String(20))
     tag_bg = db.Column(db.String(20))
@@ -147,12 +169,12 @@ class Announcement(db.Model):
 class RepairRequest(db.Model):
     __tablename__ = 'repair_requests'
     request_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = db.Column(db.String(36), db.ForeignKey('users.user_id'), nullable=False)
+    user_id = db.Column(db.String(36), db.ForeignKey('users.user_id', ondelete='CASCADE'), nullable=False, index=True)
     title = db.Column(db.String(255), nullable=False)
-    category = db.Column(db.String(100))
+    category = db.Column(db.String(100), index=True)
     description = db.Column(db.Text)
-    submitted_date = db.Column(db.DateTime, default=datetime.now)
-    status = db.Column(db.String(50), default='pending')
+    submitted_date = db.Column(db.DateTime, default=datetime.utcnow, nullable=False, index=True)
+    status = db.Column(db.String(50), default='pending', index=True)
     image_paths = db.Column(db.Text)
 
     requester = db.relationship('User', backref='repair_requests_made')
@@ -173,15 +195,15 @@ class RepairRequest(db.Model):
 class BookingRequest(db.Model):
     __tablename__ = 'booking_requests'
     booking_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = db.Column(db.String(36), db.ForeignKey('users.user_id'), nullable=False)
-    location = db.Column(db.String(100), nullable=False)
-    date = db.Column(db.Date, nullable=False)
+    user_id = db.Column(db.String(36), db.ForeignKey('users.user_id', ondelete='CASCADE'), nullable=False, index=True)
+    location = db.Column(db.String(100), nullable=False, index=True)
+    date = db.Column(db.Date, nullable=False, index=True)
     start_time = db.Column(db.String(10), nullable=False)
     end_time = db.Column(db.String(10), nullable=False)
     purpose = db.Column(db.Text)
     attendee_count = db.Column(db.Integer)
-    status = db.Column(db.String(50), default='pending')
-    requested_at = db.Column(db.DateTime, default=datetime.now)
+    status = db.Column(db.String(50), default='pending', index=True)
+    requested_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     booker = db.relationship('User', backref='booking_requests_made')
 
@@ -204,12 +226,12 @@ class Bill(db.Model):
     __tablename__ = 'bills'
     bill_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     item_name = db.Column(db.String(255), nullable=False)
-    amount = db.Column(db.Float, nullable=False)
-    due_date = db.Column(db.Date, nullable=False)
-    recipient_id = db.Column(db.String(36), nullable=False)
-    issued_by_user_id = db.Column(db.String(36), db.ForeignKey('users.user_id'))
-    issued_date = db.Column(db.DateTime, default=datetime.now)
-    status = db.Column(db.String(50), default='unpaid')
+    amount = db.Column(db.Numeric(10, 2), nullable=False)
+    due_date = db.Column(db.Date, nullable=False, index=True)
+    recipient_id = db.Column(db.String(36), nullable=False, index=True)
+    issued_by_user_id = db.Column(db.String(36), db.ForeignKey('users.user_id', ondelete='SET NULL'))
+    issued_date = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    status = db.Column(db.String(50), default='unpaid', index=True)
 
     issuer = db.relationship('User', backref='bills_issued_by_me')
 
@@ -217,7 +239,7 @@ class Bill(db.Model):
         return {
             'bill_id': self.bill_id,
             'item_name': self.item_name,
-            'amount': self.amount,
+            'amount': float(self.amount),
             'due_date': self.due_date.isoformat(),
             'recipient_id': self.recipient_id,
             'issued_by_user_id': self.issued_by_user_id,
@@ -229,12 +251,12 @@ class Bill(db.Model):
 class Payment(db.Model):
     __tablename__ = 'payments'
     payment_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    bill_id = db.Column(db.String(36), db.ForeignKey('bills.bill_id'), nullable=False)
-    user_id = db.Column(db.String(36), db.ForeignKey('users.user_id'), nullable=False)
-    amount = db.Column(db.Float, nullable=False)
-    payment_date = db.Column(db.DateTime, default=datetime.now)
+    bill_id = db.Column(db.String(36), db.ForeignKey('bills.bill_id', ondelete='CASCADE'), nullable=False, index=True)
+    user_id = db.Column(db.String(36), db.ForeignKey('users.user_id', ondelete='CASCADE'), nullable=False, index=True)
+    amount = db.Column(db.Numeric(10, 2), nullable=False)
+    payment_date = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     payment_method = db.Column(db.String(50))
-    status = db.Column(db.String(50), default='pending')
+    status = db.Column(db.String(50), default='pending', index=True)
     slip_path = db.Column(db.String(255))
 
     bill = db.relationship('Bill', backref='payments_for_bill')
@@ -247,7 +269,7 @@ class Payment(db.Model):
             'item_name': self.bill.item_name if self.bill else None,
             'user_id': self.user_id,
             'user_name': self.payer.name if self.payer else None,
-            'amount': self.amount,
+            'amount': float(self.amount),
             'payment_date': self.payment_date.isoformat(),
             'payment_method': self.payment_method,
             'status': self.status,
@@ -430,7 +452,7 @@ class AnnouncementService(BaseService):
     
     def create(self, data):
         try:
-            published_date = datetime.fromisoformat(data.get('published_date', datetime.now().isoformat()).replace('Z', '+00:00'))
+            published_date = datetime.fromisoformat(data.get('published_date', datetime.utcnow().isoformat()).replace('Z', '+00:00'))
             
             tag = data.get('tag')
             tag_color, tag_bg = self._get_tag_colors(tag)
@@ -584,7 +606,6 @@ class BookingRequestService(BaseService):
         try:
             booking_date = datetime.fromisoformat(data['date']).date()
             
-            # Check for conflicts
             conflict = self._check_booking_conflict(
                 data['location'],
                 booking_date,
@@ -633,7 +654,6 @@ class BookingRequestService(BaseService):
             req.attendee_count = data.get('attendee_count', req.attendee_count)
             req.status = data.get('status', req.status)
             
-            # Check for conflicts if updating time/location
             if req.status in ['pending', 'approved']:
                 conflict = self._check_booking_conflict(
                     req.location,
@@ -800,7 +820,9 @@ class PaymentService(BaseService):
             self.db.session.add(new_payment)
             bill.status = 'pending_verification'
             self.db.session.commit()
+            
             self.socketio.emit('new_payment_receipt', new_payment.to_dict(), room='admins')
+            
             return {'message': 'Payment recorded successfully, awaiting verification', 'payment': new_payment.to_dict()}, 201
         except Exception as e:
             return self.handle_error(e)
@@ -873,8 +895,10 @@ class PaymentService(BaseService):
                 bill.status = 'unpaid'
             
             self.db.session.commit()
+            
             self.socketio.emit('payment_rejected', payment.to_dict(), room=payment.user_id)
             self.socketio.emit('payment_rejected', payment.to_dict(), room='admins')
+            
             return {'message': 'Payment rejected', 'payment': payment.to_dict()}, 200
         except Exception as e:
             return self.handle_error(e)
@@ -1167,7 +1191,7 @@ def create_app():
             'sender_avatar': sender_avatar,
             'room_name': room_name,
             'content': content,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.utcnow().isoformat()
         }, room=room_name)
     
     return app, socketio
@@ -1176,8 +1200,7 @@ def create_app():
 # Database Initialization
 # ============================================
 def populate_initial_data():
-    """สร้างบัญชีผู้ใช้เริ่มต้น (Admin และ Resident)"""
-    print("ฐานข้อมูลว่างเปล่า กำลังสร้างบัญชีผู้ใช้เริ่มต้น...")
+    print("กำลังสร้างบัญชีผู้ใช้เริ่มต้น...")
     try:
         admin_user = User(
             name='ผู้ดูแลระบบ',
@@ -1225,4 +1248,5 @@ if __name__ == '__main__':
         else:
             print("ฐานข้อมูลมีข้อมูลผู้ใช้อยู่แล้ว")
     
-    socketio.run(app, debug=True, port=5000, host='0.0.0.0')
+    port = int(os.environ.get('PORT', 5000))
+    socketio.run(app, debug=True, port=port, host='0.0.0.0')

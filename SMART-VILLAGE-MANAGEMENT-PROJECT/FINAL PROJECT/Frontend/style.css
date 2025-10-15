@@ -336,6 +336,7 @@ body {
     background-color: #b71c1c;
     color: #fff !important;
     transition: background 0.3s, color 0.3s;
+    font-family: 'Kanit', sans-serif;
 }
 .sidebar-menu a:hover::before {
     content: '';

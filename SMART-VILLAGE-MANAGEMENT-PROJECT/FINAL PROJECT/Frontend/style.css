@@ -325,6 +325,7 @@ body {
     text-decoration: none;
     transition: all 0.3s ease;
     border-left: 3px solid transparent;
+    font-weight: 600;
 }
 
 .sidebar-menu a:hover {

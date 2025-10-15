@@ -12,21 +12,15 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy import or_, and_
-from sqlalchemy.dialects.postgresql import UUID
 
 # ============================================
 # Configuration Class
 # ============================================
 class Config:
-    # แก้ไขตรงนี้ให้ตรงกับ PostgreSQL ของคุณ
-    POSTGRES_USER = 'postgres'  # เปลี่ยนเป็น username ของคุณ
-    POSTGRES_PASSWORD = '160366'  # เปลี่ยนเป็น password จริง
-    POSTGRES_HOST = 'localhost'
-    POSTGRES_PORT = '5433'
-    POSTGRES_DB = 'smart_village'
-    
-    # สำหรับ Production (เช่น Railway, Render)
-    DATABASE_URL = os.environ.get('DATABASE_URL')
+    # SQLite Configuration
+    BASE_DIR = os.path.abspath(os.path.dirname(__file__))
+    DATABASE_NAME = os.environ.get('DATABASE_NAME', 'smart_village.db')
+    SQLALCHEMY_DATABASE_URI = f'sqlite:///{os.path.join(BASE_DIR, DATABASE_NAME)}'
     
     UPLOAD_FOLDER = 'static/uploads'
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx'}
@@ -35,24 +29,8 @@ class Config:
     
     @classmethod
     def init_app(cls, app):
-        # ใช้ DATABASE_URL ถ้ามี (สำหรับ Production)
-        if cls.DATABASE_URL:
-            # แก้ไข postgres:// เป็น postgresql:// สำหรับ SQLAlchemy
-            database_url = cls.DATABASE_URL.replace('postgres://', 'postgresql://')
-            app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-        else:
-            # ใช้ค่าที่ตั้งไว้สำหรับ Development
-            app.config['SQLALCHEMY_DATABASE_URI'] = (
-                f'postgresql://{cls.POSTGRES_USER}:{cls.POSTGRES_PASSWORD}@'
-                f'{cls.POSTGRES_HOST}:{cls.POSTGRES_PORT}/{cls.POSTGRES_DB}'
-            )
-        
+        app.config['SQLALCHEMY_DATABASE_URI'] = cls.SQLALCHEMY_DATABASE_URI
         app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-            'pool_size': 10,
-            'pool_recycle': 3600,
-            'pool_pre_ping': True,  # ป้องกัน connection timeout
-        }
         app.config['UPLOAD_FOLDER'] = cls.UPLOAD_FOLDER
         app.config['MAX_CONTENT_LENGTH'] = cls.MAX_CONTENT_LENGTH
         
@@ -108,7 +86,7 @@ class FileManager:
         return saved_paths
 
 # ============================================
-# Database Models (PostgreSQL Compatible)
+# Database Models (SQLite Compatible)
 # ============================================
 db = SQLAlchemy()
 
@@ -226,7 +204,7 @@ class Bill(db.Model):
     __tablename__ = 'bills'
     bill_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     item_name = db.Column(db.String(255), nullable=False)
-    amount = db.Column(db.Numeric(10, 2), nullable=False)
+    amount = db.Column(db.Float, nullable=False)  # ใช้ Float แทน Numeric สำหรับ SQLite
     due_date = db.Column(db.Date, nullable=False, index=True)
     recipient_id = db.Column(db.String(36), nullable=False, index=True)
     issued_by_user_id = db.Column(db.String(36), db.ForeignKey('users.user_id', ondelete='SET NULL'))
@@ -253,7 +231,7 @@ class Payment(db.Model):
     payment_id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     bill_id = db.Column(db.String(36), db.ForeignKey('bills.bill_id', ondelete='CASCADE'), nullable=False, index=True)
     user_id = db.Column(db.String(36), db.ForeignKey('users.user_id', ondelete='CASCADE'), nullable=False, index=True)
-    amount = db.Column(db.Numeric(10, 2), nullable=False)
+    amount = db.Column(db.Float, nullable=False)  # ใช้ Float แทน Numeric สำหรับ SQLite
     payment_date = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     payment_method = db.Column(db.String(50))
     status = db.Column(db.String(50), default='pending', index=True)
